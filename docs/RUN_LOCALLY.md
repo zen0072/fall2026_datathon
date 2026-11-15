@@ -2,7 +2,7 @@
 
 Updated November 15, 2026 for the clone-and-run launcher, bundled real classifications and local API-key form.
 
-The quickest path loads the saved real results: **79 mapped locations, 1,868 retained reviews summarized, and 365 evidence excerpts**. You do not need raw CSVs, notebook dependencies, Node.js, an OpenAI key, or a model-training run to explore the website and use its offline chatbot. The saved snapshot predates the newest matching changes and uses provisional rule-generated training labels; it does not establish verified current accessibility.
+The quickest path loads saved LLM-classified results: **79 mapped locations, 1,868 retained reviews summarized, and 1,303 evidence excerpts**. You do not need raw CSVs, notebook dependencies, Node.js, an OpenAI key, or a model-training run to explore the website and use its offline chatbot. The LLM run uses the historical retained cohort without rerunning the newest matching changes. It does not use keyword-generated training labels and has not undergone independent human accuracy evaluation.
 
 ## 1. Get the repository
 
@@ -124,7 +124,7 @@ If port 8000 is already in use, choose another port:
 
 Then open [http://127.0.0.1:8001/](http://127.0.0.1:8001/). Use the same Windows Python executable substitution for this and later Python commands.
 
-Do not start two processes using the same DuckDB file. Stop the first one, use its browser import button, or use separate database files for separate instances.
+Do not start two processes using the same DuckDB file. Stop the first one before a command-line import, or use separate database files for separate instances.
 
 ## 7. Import new notebook results or retrain
 
@@ -132,15 +132,7 @@ A fresh Git clone includes the saved real-results JSON at `access_app/data/class
 
 **If you already have `frontend_results_PRIVATE.json`:**
 
-Start a separate real-results database, without seeding a demo:
-
-```sh
-.venv/bin/python -m access_app serve --db var/access.duckdb
-```
-
-Click **Import results** and choose the exported JSON. The map/list refresh after a successful import. Select the JSON file, not the notebook, a raw CSV, or the results ZIP; extract the ZIP first if needed. Browser imports are limited to 128 MiB.
-
-Alternatively, stop the server and import through the command line:
+Stop the server using the target database and import through the command line:
 
 ```sh
 .venv/bin/python -m access_app import "/path/to/frontend_results_PRIVATE.json" --db var/access.duckdb

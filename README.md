@@ -12,7 +12,7 @@ Read the [complete system design and website walkthrough](docs/SYSTEM_DESIGN.md)
 
 This version adds conservative alternate-ID/name-address matching, a five-model comparison including Naive Bayes and a majority baseline, separate human-annotation handoffs, an evidence chatbot, and an optional OSM context adapter. See [IMPROVEMENTS.md](IMPROVEMENTS.md) for commands, measured input coverage, limitations and optional LLM setup.
 
-**Current verification boundary:** the repo includes the existing real-data classified snapshot: **79 mapped locations, 1,868 retained reviews summarized, and 365 evidence excerpts**. This snapshot predates the latest matching/model-comparison changes; those changes have not regenerated it. Independent human evaluation remains pending. The raw organizer files and training dependencies are not needed to explore these saved results.
+**Current bundled results:** direct LLM classification of **1,868 real reviews across 79 mapped locations**, producing **1,303 evidence excerpts** across five access aspects. The run uses `gpt-5.6-terra` and the historical retained review cohort; it does not rerun the latest matching changes or use keyword-generated training labels. Independent human evaluation remains pending. Raw organizer files, training dependencies and an API key are not needed to explore the saved results.
 
 ## Run the local app
 
@@ -53,23 +53,33 @@ The app serves its frontend and JSON API from one Python process and persists re
 ## Connect a notebook run
 
 1. Run `Access_Beyond_the_Map.ipynb` in Colab with the intended mode and source files. Section 9 now creates **`frontend_results_PRIVATE.json`**, also included in the final results ZIP.
-2. In the app, choose **Import results** and select that file. Alternatively:
+2. Stop the app and import that file through the command line:
 
    ```sh
    .venv/bin/python -m access_app import /absolute/path/frontend_results_PRIVATE.json --db var/access.duckdb
    ```
 
-   Stop the app before running a separate command-line importer against the same DuckDB file. While the app is running, use its import button so its single backend process owns writes.
+   Restart the app after importing. The explorer loads the active database snapshot.
 
 3. Search or filter the location list and map by service, access issue, and classification. Select a location to read its dated supporting, positive, and conflicting excerpts on the same page.
 
-The browser import limit is 128 MB; use the CLI for larger results files. Refresh the browser after a CLI import. The notebook's existing real-data acquisition and human-label requirements still apply: the app does not bypass download quotas, train models on requests, or turn rule labels into independent evaluation.
+Refresh the browser after a CLI import. The notebook's existing real-data acquisition and human-label requirements still apply: the app does not bypass download quotas, train models on requests, or turn rule labels into independent evaluation.
+
+## Direct LLM classification
+
+The offline [LLM classification runner](docs/LLM_CLASSIFICATION.md) classified
+the 1,868 reviews behind the existing map across all five accessibility aspects,
+and exported review predictions and a frontend-compatible locations snapshot.
+It requires the local raw Reviews CSV, historical split manifest and your own
+API key. It uses numbered source passages to preserve exact review evidence,
+checkpoints completed requests, and makes zero API calls unless `--run` is set.
+This is separate from the chatbot's optional evidence selection.
 
 ## Historical real-data run: TF-IDF + logistic regression
 
 In the original local run, both full organizer files were cached in ignored `data/`: **Places** has 147,429 rows (506,418,083 bytes) and **Reviews** has 213,536 rows (221,618,514 bytes). These raw files are not included in a clone. Source SHA-256 hashes are recorded in the bundled snapshot and the private run's `outputs/real/sources.json`. The user supplied the full Places CSV after the earlier Drive quota block.
 
-The notebook completed locally in real mode and its **trained word TF-IDF + logistic regression predictions** are included as the bundled snapshot in `access_app/data/classified_locations.json`. The export contains **79 mapped locations, 1,868 retained reviews, and 365 aspect excerpts**. This replaces the earlier reviews-only keyword snapshot. The full notebook filters explicitly permanently closed places, scopes essential-service categories, deduplicates reviews and holds out locations before training. New matching/model changes do not alter the bundled snapshot until a new notebook run is exported.
+The earlier notebook completed locally in real mode and exported **trained word TF-IDF + logistic regression predictions** for **79 mapped locations, 1,868 retained reviews, and 365 aspect excerpts**. That original export remains in private `outputs/real/frontend_results_PRIVATE.json` for comparison. The bundled snapshot at `access_app/data/classified_locations.json` now contains direct LLM classifications of the same retained reviews. The notebook filters explicitly permanently closed places, scopes essential-service categories, deduplicates reviews and holds out locations before training.
 
 Coverage is limited: 2,985 raw review rows match a Places ID; after empty-review and closure filtering, 2,837 rows remain matched (about 1.33% of eligible review rows). The essential-service subset retains 1,868 reviews after deduplication. It is not a complete inventory, and zero matches for a service do not establish that the service is absent.
 
@@ -87,12 +97,12 @@ To reproduce and import the full run, stop the app and run:
 
 The runner executes the actual notebook cells, skips only the Colab installation magic, saves a private log and run status under `outputs/real/`, validates the resulting JSON, and imports only after the notebook completes successfully. Choose `--prediction-model tfidf_word_char` for the trained word/character variant, or `validation_winner` to export the comparison winner. The current results file is `outputs/real/frontend_results_PRIVATE.json`.
 
-The previous reviews-only adapter remains available as `scripts/import_real_reviews.py` for explicitly requested partial runs. It is not the currently imported result source.
+The previous reviews-only adapter remains available as `scripts/import_real_reviews.py` for explicitly requested partial runs. The bundled and current local results use direct LLM classification, not that adapter.
 
 ## How the connection works
 
 ```text
-Organizer CSVs → notebook labeling/modeling → versioned results JSON
+Organizer CSVs → retained matched reviews → LLM classification → versioned results JSON
                                              ↓
                              DuckDB result snapshots + Python API
                                              ↓
@@ -100,6 +110,11 @@ Organizer CSVs → notebook labeling/modeling → versioned results JSON
 ```
 
 DuckDB holds immutable result snapshots, location summaries, and review evidence. Imports validate the whole payload before a transaction and switch the active results pointer. Reimporting the same file is idempotent. Source hashes, label provenance, and evaluation status remain in the imported metadata and private exports.
+
+The original TF-IDF notebook remains available as a comparison workflow. The LLM
+runner uses the same retained cohort, classifies every review across all five
+aspects, and aggregates states locally. Quoted evidence is copied from selected
+source passages; it is not generated prose.
 
 ## Frontend
 

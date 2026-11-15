@@ -2,7 +2,24 @@
 
 This document describes the implemented code, inspected November 15, 2026. The project helps advocates and service coordinators inspect **reported access barriers** in reviews of clinics, pharmacies and grocery stores. The output supports manual verification; it does not certify a location's current accessibility.
 
-The system has two execution stages: **batch analysis** in a notebook and **interactive exploration** in a local website. Classification happens in the batch stage. Opening the map, changing filters or asking the chatbot a question does not retrain or invoke the review classifiers. The only optional online model call is the chatbot's evidence selector.
+The system has two execution stages: **batch analysis** through the LLM runner or notebook and **interactive exploration** in a local website. Classification happens in the batch stage. Opening the map, changing filters or asking the chatbot a question does not retrain or invoke the review classifiers. During interactive exploration, the only optional model call is the chatbot's evidence selector; the batch LLM runner makes separate API calls beforehand.
+
+## Current classified snapshot: direct LLM review classification
+
+The active local and bundled snapshot now uses `gpt-5.6-terra` to classify the
+same 1,868 historically retained reviews across all five accessibility aspects.
+`scripts/classify_reviews_llm.py` recovers that cohort, applies a documented
+rubric through structured output, and exports 79 locations with 1,303 evidence
+excerpts. The model selects numbered passages; exact quotations and per-place
+aggregates are built locally. This uses no keyword training labels and does not
+rerun the new matcher. Independent human evaluation remains pending.
+
+The flow is **raw Reviews + historical matched cohort → direct LLM review
+classification → local location/aspect aggregation → versioned JSON → DuckDB
+→ Python API → list/map/evidence**. The original notebook workflow described
+below remains available for TF-IDF baselines and model research. The chatbot is
+a separate optional evidence-selection feature. See
+[LLM classification](LLM_CLASSIFICATION.md) for commands and output provenance.
 
 ## 1. System design diagram
 
@@ -156,7 +173,7 @@ The database also retains `work_items` and related APIs for compatibility. The c
 
 1. **Start the server.** `python3 scripts/launch_app.py` creates/reuses `.venv`, installs only app dependencies and runs `python -m access_app serve --bundled` on loopback. The included existing real snapshot (79 mapped locations, 1,868 retained reviews summarized, 365 excerpts) seeds an empty database. Existing results are preserved. HTML, CSS, vendored Leaflet JavaScript and the JSON API come from one Python process. Explicit `--demo` seeds four fictional locations instead; serving without either seed option leaves an empty database at the import prompt.
 2. **Load the page.** JavaScript requests `/api/metadata` to display dataset mode and coverage and `/api/chat/config` to determine whether optional LLM selection is available. The latter reports availability/model, never the key. The local-only password form can POST a key and model to `/api/chat/config`, or clear them for offline mode. Saving makes no OpenAI request, and the user must separately select the LLM checkbox before asking a question.
-3. **Import results, if needed.** “Import results” reads the notebook JSON and posts it to `/api/import`. The browser limit is 128 MiB; the CLI importer can handle larger files. Imported results do not initiate training.
+3. **Load saved results.** The launcher seeds the bundled snapshot into an empty database. To replace it, stop the app, use the command-line importer and restart. Imported results do not initiate training. The backend `/api/import` endpoint remains available for programmatic imports.
 4. **Fetch the list and map.** Two parallel `/api/places` requests use the same service, aspect, search, classification and sort filters. The list requests 20 rows per page; the map requests the first 500 matching rows. SQL queries stored classifications. Search matches location names/addresses, not semantic review content.
 5. **Render the map.** Leaflet draws stored coordinates and classification colors over Esri tiles. Missing coordinates remain usable in the list. Network tile failure does not remove stored evidence.
 6. **Select a location.** `/api/places/{place_id}?aspect=...` returns location metadata, all five aspect summaries, and up to 50 exported excerpts for the selected aspect, ordered by date. The UI shows the returned count against the available total. Display dates use UTC.
@@ -252,7 +269,7 @@ The prior repository documented 79 mapped locations, 1,868 retained reviews and 
 | [Schema](../access_app/schema.py) | Import validation and status definitions |
 | [Database](../access_app/database.py) | Snapshot storage, parameterized queries, compatibility work items |
 | [Server](../access_app/server.py), [entry point](../access_app/__main__.py) | HTTP routes, static assets, local startup/import |
-| [Frontend](../access_app/static/app.js), [HTML](../access_app/static/index.html) | Import controls, filters, list/map/details and chat rendering |
+| [Frontend](../access_app/static/app.js), [HTML](../access_app/static/index.html) | Filters, list/map/details and chat rendering |
 | [Chat](../access_app/chat.py) | Intent/scope, SQL aggregation/ranking, evidence retrieval, optional LLM selection and templated answer |
 | [Live smoke test](../scripts/test_live_llm.py) | Two opt-in calls using fictional evidence; never counts fallback as live success |
 

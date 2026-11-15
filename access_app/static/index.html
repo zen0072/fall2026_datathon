@@ -15,7 +15,6 @@
   <div class="app-shell">
     <header class="masthead">
       <a href="/" class="brand"><span class="brand-symbol" aria-hidden="true">↗</span><span>Access Beyond the Map</span></a>
-      <div class="header-actions"><span id="dataset-badge" class="dataset-badge">Loading results</span><label class="button secondary import-button">Import results<input id="import-file" aria-label="Import results" type="file" accept=".json,application/json"></label></div>
     </header>
 
     <main id="main" class="main-content">
@@ -23,8 +22,8 @@
       <div id="notice" role="status" aria-live="polite" hidden></div>
       <div id="coverage-notice" class="coverage-notice" role="note" hidden></div>
       <section id="empty-state" class="panel empty-state" hidden>
-        <span class="eyebrow">Ready for your results</span><h2>Bring your classified places onto the map</h2>
-        <p>Import the results file from a notebook run to explore locations and their accessibility classifications.</p>
+        <span class="eyebrow">Location explorer</span><h2>No locations loaded</h2>
+        <p>Locations and their accessibility classifications will appear here when results are available.</p>
       </section>
 
       <section id="locations-page" aria-label="Location explorer">

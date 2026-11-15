@@ -1,3 +1,39 @@
+# Direct LLM classification verification — November 15, 2026
+
+The paid live run completed with OpenAI `gpt-5.6-terra`: **1,868 reviews**, all
+**9,340 review/aspect classifications**, **79 mapped locations**, and **1,303
+evidence excerpts**. It recovers the exact historical retained cohort using the
+original source hash, retained record IDs and per-place counts, without
+rerunning matching or passing keyword labels/TF-IDF predictions to the model.
+
+An initial literal-quotation approach stopped when returned text did not match
+the source exactly. The final approach selects enumerated source passage IDs
+and copies quotations locally. All 1,868 final results passed validation and
+imported into DuckDB as snapshot `5682eae30307e819d503159e`, with
+`label_mode=llm_direct_classification`. Scores are null; previous model metrics
+are not reused. The active local database and bundled snapshot contain these
+results. The earlier TF-IDF export remains in private `outputs/real/`.
+
+The runner preserves validated checkpoints, stops after failed request groups,
+and never converts missing/failed results to no-mention. Private exports include
+all per-review states and request provenance, the frontend JSON, and counts by
+aspect under ignored `outputs/llm/`. The API key is read from an ignored `.env`
+and is not written to result metadata. The software suite covers quote/source-ID
+validation, missing results, true denominator counts, counterevidence, provider
+failures, checkpoint resume, and fresh-clone seeding. Independent human accuracy
+evaluation remains pending; source fidelity does not establish label accuracy.
+
+After updating the bundled results, the full suite passed **54 tests**. Browser
+verification confirmed all 79 mapped locations, changed physical classifications,
+and financial-access evidence (including 23 barrier reports at the selected
+Santa Clara clinic). The model badge, import button and provisional-label banner
+are absent as requested. No browser console warnings/errors were recorded.
+JavaScript syntax and diff whitespace checks passed.
+
+The sections below preserve earlier verification contexts and their limits.
+
+---
+
 # Clone-and-run verification — November 15, 2026
 
 The local launcher was tested from a clean copy of the app without raw `data/`,

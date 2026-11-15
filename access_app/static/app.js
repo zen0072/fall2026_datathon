@@ -16,7 +16,6 @@ let map, mapLayers, requestVersion=0, detailVersion=0, markers=new Map();
 const badge = status => {const s=statuses[status] || statuses.insufficient_evidence;return `<span class="badge ${s.className}">${s.label}</span>`;};
 const date = value => value ? new Date(value).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric',timeZone:'UTC'}) : 'Unknown date';
 const number = value => Number(value || 0).toLocaleString();
-const displayMode = () => state.metadata?.dataset?.mode === 'synthetic' ? 'Synthetic demo' : state.metadata?.dataset?.model?.startsWith('tfidf_') ? 'TF-IDF predictions' : 'Real-data results';
 
 function notice(message, error=false) {
   $('#notice').hidden = !message;
@@ -47,10 +46,8 @@ async function loadMetadata() {
   state.metadata=await api('/api/metadata');
   const data=state.metadata;
   const reviewsOnly=data.dataset?.selection?.source_mode==='reviews_only';
-  const provisional=data.dataset?.mode==='real' && data.dataset?.label_mode==='provisional_rule_labels';
-  $('#dataset-badge').textContent=reviewsOnly ? 'Real reviews · partial coverage' : data.snapshot_id ? displayMode() : 'No results loaded';
-  $('#coverage-notice').hidden=!(reviewsOnly || provisional);
-  $('#coverage-notice').textContent=reviewsOnly ? 'Partial review coverage · Classifications need verification. Coordinates are unavailable, and these locations are not limited to the Bay Area.' : provisional ? 'Model-predicted reports · Trained using provisional labels. Classifications need review and do not verify current accessibility.' : '';
+  $('#coverage-notice').hidden=!reviewsOnly;
+  $('#coverage-notice').textContent=reviewsOnly ? 'Partial review coverage · Classifications need verification. Coordinates are unavailable, and these locations are not limited to the Bay Area.' : '';
   $('#empty-state').hidden=Boolean(data.snapshot_id);
   $('#locations-page').hidden=!data.snapshot_id;
 }
@@ -158,7 +155,7 @@ async function loadDetail() {
   if (version!==detailVersion) return;
   const p=result.place;
   const a=result.aspects.find(a=>a.aspect===state.aspect);
-  $('#location-detail').innerHTML=`<div class="detail-heading"><span class="eyebrow">${services[p.service]} · ${aspects[state.aspect]}</span><h2>${escapeHTML(p.name)}</h2>${p.address?`<p class="small muted">${escapeHTML(p.address)}</p>`:''}<p class="small muted">${number(a.barrier_reports)} barrier · ${number(a.positive_reports)} positive · ${number(a.uncertain_reports)} mixed reports / ${number(a.sampled_reviews)} sampled reviews</p>${p.closure_status==='temporarily_closed'?'<span class="badge barrier">Reported temporarily closed</span>':''}</div><div class="evidence-grid">${result.evidence.length?result.evidence.map(e=>`<div class="evidence-item">${badge(e.state)}<blockquote>“${escapeHTML(e.text)}”</blockquote><p class="small muted">${date(e.review_date)} · Evidence ${escapeHTML(e.record_id)}</p></div>`).join(''):'<div class="evidence-item"><span class="badge">Insufficient evidence</span><p class="small muted">No relevant excerpts are available for this access issue. Current conditions need verification.</p></div>'}</div><p class="detail-footnote">${displayMode()} · Showing ${number(result.evidence.length)} of ${number(result.evidence_total)} excerpts. Classifications describe historical review text and need verification.</p>`;
+  $('#location-detail').innerHTML=`<div class="detail-heading"><span class="eyebrow">${services[p.service]} · ${aspects[state.aspect]}</span><h2>${escapeHTML(p.name)}</h2>${p.address?`<p class="small muted">${escapeHTML(p.address)}</p>`:''}<p class="small muted">${number(a.barrier_reports)} barrier · ${number(a.positive_reports)} positive · ${number(a.uncertain_reports)} mixed reports / ${number(a.sampled_reviews)} sampled reviews</p>${p.closure_status==='temporarily_closed'?'<span class="badge barrier">Reported temporarily closed</span>':''}</div><div class="evidence-grid">${result.evidence.length?result.evidence.map(e=>`<div class="evidence-item">${badge(e.state)}<blockquote>“${escapeHTML(e.text)}”</blockquote><p class="small muted">${date(e.review_date)} · Evidence ${escapeHTML(e.record_id)}</p></div>`).join(''):'<div class="evidence-item"><span class="badge">Insufficient evidence</span><p class="small muted">No relevant excerpts are available for this access issue. Current conditions need verification.</p></div>'}</div><p class="detail-footnote">Showing ${number(result.evidence.length)} of ${number(result.evidence_total)} excerpts. Classifications describe historical review text and need verification.</p>`;
 }
 
 function filterChanged() {state.offset=0;run(loadLocations());}
@@ -168,18 +165,6 @@ for (const [id,key] of [['service','service'],['report-status','status'],['sort'
 document.querySelectorAll('[data-aspect]').forEach(button=>button.addEventListener('click',()=>{state.aspect=button.dataset.aspect;filterChanged();}));
 $('#previous-page').addEventListener('click',()=>{state.offset=Math.max(0,state.offset-state.limit);run(loadLocations());});
 $('#next-page').addEventListener('click',()=>{state.offset+=state.limit;run(loadLocations());});
-$('#import-file').addEventListener('change',event=>run((async()=>{
-  const file=event.target.files[0];if (!file) return;
-  if (file.size>128*1024*1024) {notice('This results file exceeds the 128 MB browser import limit. Use the command-line importer for larger files.',true);event.target.value='';return;}
-  event.target.disabled=true;notice(`Importing ${file.name}…`);
-  try {
-    let payload;try {payload=JSON.parse(await file.text());}catch {throw new Error('This file is not valid JSON. Import frontend_results_PRIVATE.json from the notebook.');}
-    state.metadata=await api('/api/import',{method:'POST',body:payload});
-    state.offset=0;state.selected=null;
-    await loadData();
-    notice(`Imported ${number(state.metadata.coverage.locations)} locations. The list and map are up to date.`);
-  } finally {event.target.disabled=false;event.target.value='';}
-})()));
 matchMedia('(prefers-color-scheme:dark)').addEventListener('change',()=>{if (state.metadata?.snapshot_id) run(loadLocations());});
 if (['#locations','#queue','#data'].includes(location.hash)) history.replaceState(null,'',location.pathname+location.search);
 run(loadData());
