@@ -15,7 +15,7 @@ from pathlib import Path
 
 import duckdb
 
-from .schema import ACTION_TYPES, ASPECTS, SERVICES, WORK_STATUSES, AppError, choice, integer, text, utc_now, validate_bundle
+from .schema import ACTION_TYPES, ASPECTS, SERVICES, STATES, WORK_STATUSES, AppError, choice, integer, text, utc_now, validate_bundle
 
 TABLE_COLUMNS = {
     "places": {"place_id": "VARCHAR", "name": "VARCHAR", "service": "VARCHAR", "address": "VARCHAR", "lat": "DOUBLE", "lon": "DOUBLE", "valid_coordinates": "BOOLEAN", "closure_status": "VARCHAR", "sampled_reviews": "BIGINT"},
@@ -104,7 +104,7 @@ class Store:
     def list_places(self, *, aspect="physical", service="all", search="", status="all", sort="barriers", limit=50, offset=0):
         choice(aspect, ASPECTS, "aspect")
         choice(service, ("all",) + SERVICES, "service")
-        choice(status, ("all", "reported_barrier", "conflicting_or_unclear", "positive_evidence", "insufficient_evidence"), "report status")
+        choice(status, ("all", "with_evidence", "reported_barrier", "conflicting_or_unclear", "positive_evidence", "insufficient_evidence"), "report status")
         orders = {"barriers": "a.barrier_reports DESC, a.uncertain_reports DESC, p.name", "recent": "a.last_date DESC NULLS LAST, p.name", "name": "lower(p.name)"}
         choice(sort, tuple(orders), "sort")
         search = text(search, "search", 200, True)
@@ -122,25 +122,37 @@ class Store:
                 where.append("p.service=?"); params.append(service)
             if search:
                 where.append("contains(lower(p.name || ' ' || p.address), lower(?))"); params.append(search)
-            if status != "all":
+            if status == "with_evidence":
+                where.append("EXISTS (SELECT 1 FROM evidence e WHERE e.snapshot_id=p.snapshot_id AND e.place_id=p.place_id AND e.aspect=a.aspect)")
+            elif status != "all":
                 where.append("a.status=?"); params.append(status)
             base = " FROM places p JOIN place_aspects a ON p.snapshot_id=a.snapshot_id AND p.place_id=a.place_id WHERE " + " AND ".join(where)
             total = self.connection.execute("SELECT count(*)" + base, params).fetchone()[0]
             items = self._rows("SELECT p.*, a.aspect, a.barrier_reports, a.positive_reports, a.uncertain_reports, a.status, a.last_date, a.verification_question" + base + f" ORDER BY {orders[sort]} LIMIT ? OFFSET ?", params + [limit, offset])
             return {"items": items, "total": total, "limit": limit, "offset": offset, "snapshot_id": sid}
 
-    def place_detail(self, place_id, aspect="physical", snapshot_id=None):
+    def place_detail(self, place_id, aspect="physical", snapshot_id=None, *, evidence_state="all", evidence_offset=0):
         choice(aspect, ASPECTS, "aspect")
+        choice(evidence_state, ("all",) + STATES, "evidence state")
+        integer(evidence_offset, "evidence offset")
         with self.lock:
             sid = self._active(snapshot_id)
             rows = self._rows("SELECT * FROM places WHERE snapshot_id=? AND place_id=?", [sid, place_id])
             if not rows:
                 raise AppError("Location not found in this results snapshot.", 404)
             aspects = self._rows("SELECT * FROM place_aspects WHERE snapshot_id=? AND place_id=? ORDER BY aspect", [sid, place_id])
-            excerpts = self._rows("SELECT record_id, state, text, review_date, score, barrier_score FROM evidence WHERE snapshot_id=? AND place_id=? AND aspect=? ORDER BY review_date DESC NULLS LAST, record_id LIMIT 50", [sid, place_id, aspect])
-            total = self.connection.execute("SELECT count(*) FROM evidence WHERE snapshot_id=? AND place_id=? AND aspect=?", [sid, place_id, aspect]).fetchone()[0]
+            counts = dict.fromkeys(STATES, 0)
+            counts.update({r["state"]: r["n"] for r in self._rows("SELECT state, count(*) AS n FROM evidence WHERE snapshot_id=? AND place_id=? AND aspect=? GROUP BY state", [sid, place_id, aspect])})
+            counts["all"] = sum(counts.values())
+            where = "snapshot_id=? AND place_id=? AND aspect=?"
+            params = [sid, place_id, aspect]
+            if evidence_state != "all":
+                where += " AND state=?"
+                params.append(evidence_state)
+            excerpts = self._rows(f"SELECT record_id, state, text, review_date, score, barrier_score FROM evidence WHERE {where} ORDER BY review_date DESC NULLS LAST, record_id LIMIT 50 OFFSET ?", params + [evidence_offset])
+            total = counts[evidence_state]
             existing = self._rows("SELECT * FROM work_items WHERE place_id=? AND aspect=?", [place_id, aspect])
-            return {"place": rows[0], "aspects": aspects, "evidence": excerpts, "evidence_total": total, "work_item": existing[0] if existing else None, "snapshot_id": sid}
+            return {"place": rows[0], "aspects": aspects, "evidence": excerpts, "evidence_total": total, "evidence_counts": counts, "evidence_offset": evidence_offset, "work_item": existing[0] if existing else None, "snapshot_id": sid}
 
     def create_work_item(self, payload):
         if not isinstance(payload, dict):

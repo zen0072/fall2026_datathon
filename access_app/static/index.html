@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Access Beyond the Map · Access explorer</title>
+  <title>Accessibility Explorer</title>
   <meta name="description" content="Explore classified accessibility issues through a location list, map, and supporting review evidence.">
   <link rel="stylesheet" href="/vendor/leaflet.css">
   <link rel="stylesheet" href="/styles.css">
@@ -14,11 +14,11 @@
   <a class="skip-link" href="#main">Skip to main content</a>
   <div class="app-shell">
     <header class="masthead">
-      <a href="/" class="brand"><span class="brand-symbol" aria-hidden="true">↗</span><span>Access Beyond the Map</span></a>
+      <a href="/" class="brand">Accessibility Explorer</a>
     </header>
 
     <main id="main" class="main-content">
-      <div class="page-intro"><span class="eyebrow">Essential services · Accessibility</span><h1>Explore reported access barriers.</h1><p>Find classified accessibility issues on the list and map, then select a place to read the review evidence.</p></div>
+      <div class="page-intro"><p>Find classified accessibility issues on the list and map, then select a place to read the review evidence.</p></div>
       <div id="notice" role="status" aria-live="polite" hidden></div>
       <div id="coverage-notice" class="coverage-notice" role="note" hidden></div>
       <section id="empty-state" class="panel empty-state" hidden>
@@ -30,7 +30,7 @@
         <div class="filters">
           <label>Search locations<input id="search" type="search" placeholder="Name or address" maxlength="200"></label>
           <label>Service<select id="service"><option value="all">All essential services</option><option value="clinic">Clinics</option><option value="pharmacy">Pharmacies</option><option value="grocery">Groceries</option></select></label>
-          <label>Classification<select id="report-status"><option value="all">All classifications</option><option value="reported_barrier">Barrier reports</option><option value="conflicting_or_unclear">Mixed or unclear</option><option value="positive_evidence">Positive evidence</option><option value="insufficient_evidence">Insufficient evidence</option></select></label>
+          <label>Classification<select id="report-status"><option value="with_evidence">All reported evidence</option><option value="reported_barrier">Barrier reports</option><option value="conflicting_or_unclear">Mixed or unclear</option><option value="positive_evidence">Positive evidence</option><option value="insufficient_evidence">Insufficient evidence</option></select></label>
           <label>Sort by<select id="sort"><option value="barriers">Barrier report count</option><option value="recent">Most recent review</option><option value="name">Location name</option></select></label>
         </div>
         <div id="aspect-filters" class="aspect-filters" role="group" aria-label="Access issue">
@@ -41,14 +41,23 @@
           <section class="map-section" aria-label="Map of matching locations"><div id="map"></div><div id="map-placeholder" class="map-placeholder" hidden><div><span class="eyebrow">Location map</span><h2 id="map-placeholder-title">Coordinates not available</h2><p id="map-placeholder-description">The current results have no map coordinates. You can explore classifications and review evidence in the list.</p></div></div><div id="map-caption" class="map-caption"></div><div id="map-error" class="map-error" role="status" hidden>Basemap unavailable. The location list and evidence are still available.</div></section>
         </div>
         <div class="map-legend" aria-label="Classification legend"><span><i class="dot barrier"></i>Barrier reported</span><span><i class="dot mixed"></i>Mixed or unclear</span><span><i class="dot positive"></i>Positive evidence</span><span><i class="dot unknown"></i>Insufficient evidence</span></div>
-        <article id="location-detail" class="panel location-detail" aria-live="polite"><p class="muted">Select a location to inspect its evidence.</p></article>
+        <article id="location-detail" class="panel location-detail"><p class="detail-empty muted">Select a location to inspect its evidence.</p></article>
       </section>
 
       <section class="panel chat-panel" aria-labelledby="chat-title">
-        <span class="eyebrow">Evidence assistant</span><h2 id="chat-title">Ask the review data</h2>
-        <p class="muted">Explore reports, compare verification priorities and plan what to check. Uses the aspect, service and location search above; includes all classifications.</p>
+        <header class="chat-heading"><div class="chat-heading-row"><h2 id="chat-title">Ask the review data</h2><span id="chat-mode-status" class="chat-mode">Offline retrieval</span></div><p class="muted">Questions answered with supporting review excerpts.</p></header>
+        <div class="chat-context"><span class="muted">Using</span><span id="chat-context-aspect">Physical access</span><span id="chat-context-place">Selected location</span><label class="chat-scope"><input id="chat-selected" type="checkbox" checked> Only the selected location</label></div>
+        <div id="chat-results" class="chat-conversation" role="log" aria-label="Review questions and answers" aria-live="polite" aria-relevant="additions text" aria-busy="false" tabindex="0"><div id="chat-empty" class="chat-empty"><span class="eyebrow">Review assistant</span><h3>What would you like to know?</h3><p>Ask about reported barriers, compare review evidence, or plan what to verify. Each question uses the current explorer filters.</p></div></div>
+        <div class="chat-composer-area">
+          <div class="chat-prompts" role="group" aria-label="Suggested questions"><button type="button" data-chat-prompt="Summarize the accessibility reports for the current filters.">Summarize access reports</button><button type="button" data-chat-prompt="What should I verify before visiting?">What should I check?</button></div>
+          <form id="chat-form"><label class="visually-hidden" for="chat-question">Your question</label><input id="chat-question" maxlength="1500" required placeholder="Ask about the review evidence…"><button id="chat-submit" type="submit" class="button chat-send">Ask</button></form>
+          <p class="chat-session-note">Each question is answered independently using the current filters.</p>
+          <p id="chat-feedback" class="chat-feedback" role="alert" hidden></p>
         <details id="chat-settings" class="chat-settings">
-          <summary>Use your own OpenAI key</summary>
+          <summary>Connection settings</summary>
+          <div class="chat-options"><label><input id="chat-llm" type="checkbox" disabled> Use OpenAI evidence selection</label></div>
+          <p id="chat-provider" class="small muted">Offline retrieval is available without API credentials.</p>
+          <div id="chat-key-settings">
           <p class="small muted">Optional. Your key stays in this local server’s memory until you remove it or stop the app. OpenAI calls use your API billing.</p>
           <form id="chat-settings-form" autocomplete="off">
             <div class="chat-settings-fields">
@@ -59,14 +68,9 @@
             <div class="chat-key-actions"><button id="chat-key-save" type="submit" class="button secondary">Use key for this run</button><button id="chat-key-remove" type="button" class="button secondary" disabled>Remove key</button></div>
           </form>
           <p id="chat-key-status" class="small muted" role="status" aria-live="polite">No key is needed to browse locations or use offline retrieval.</p>
+          </div>
         </details>
-        <form id="chat-form">
-          <label for="chat-question">Your question<input id="chat-question" maxlength="1500" required placeholder="Which locations should we verify first, and why?"></label>
-          <div class="chat-options"><label><input id="chat-selected" type="checkbox"> Only the selected location</label><label><input id="chat-llm" type="checkbox" disabled> Use LLM evidence selection</label></div>
-          <p id="chat-provider" class="small muted">Offline retrieval is available without API credentials.</p>
-          <button id="chat-submit" type="submit" class="button secondary">Ask the data</button>
-        </form>
-        <div id="chat-results" aria-live="polite" aria-busy="false"></div>
+        </div>
       </section>
 
       <footer>Reported experiences help identify places to review. They do not verify current accessibility.<span>Dates shown in UTC</span></footer>

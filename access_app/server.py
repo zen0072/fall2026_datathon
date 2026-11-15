@@ -97,7 +97,11 @@ def make_server(store, host="127.0.0.1", port=8000):
                         raise AppError("Unknown location filter.")
                     return self._send(200, store.list_places(**query))
                 if path.startswith("/api/places/"):
-                    return self._send(200, store.place_detail(path[len("/api/places/"):], query.get("aspect", "physical"), query.get("snapshot_id")))
+                    try:
+                        evidence_offset = int(query.get("evidence_offset", 0))
+                    except ValueError as error:
+                        raise AppError("Invalid evidence offset.") from error
+                    return self._send(200, store.place_detail(path[len("/api/places/"):], query.get("aspect", "physical"), query.get("snapshot_id"), evidence_state=query.get("evidence_state", "all"), evidence_offset=evidence_offset))
                 if path == "/api/work-items.csv":
                     return self._send(200, store.export_work_items(), "text/csv; charset=utf-8", Content_Disposition='attachment; filename="access-work-queue.csv"')
                 if path == "/api/work-items":

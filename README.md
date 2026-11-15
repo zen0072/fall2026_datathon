@@ -32,9 +32,9 @@ If port 8000 is busy, use `python3 scripts/launch_app.py --port 8001`. Add `--no
 
 To test OpenAI evidence selection:
 
-1. In **Ask the review data**, expand **Use your own OpenAI key**.
+1. In **Ask the review data**, expand **Connection settings**.
 2. Enter your own API key and a Responses API model available to your account. The default is `gpt-5.6-terra`, which supports structured outputs. Choose **Use key for this run**.
-3. Select **Use LLM evidence selection**, then ask a question. A saved key has not been validated until an actual request succeeds; the answer shows whether it used OpenAI or offline retrieval.
+3. Select **Use OpenAI evidence selection**, then ask a question. A saved key has not been validated until an actual request succeeds; the answer shows whether it used OpenAI or offline retrieval.
 
 The password field clears after submission. The key goes only to your local Python server and is kept in memory, never in browser storage, the results JSON or the local database. Choose **Remove key** or stop the server to discard a key entered through the page. Requests made with your key use **your OpenAI API billing**. No API key is needed to explore locations or use offline evidence retrieval. Each LLM request sends your question and up to 24 review excerpts to OpenAI; no conversation history is sent. The app does not automatically load `.env` files; setting server environment variables remains an alternative to the form.
 
@@ -122,14 +122,16 @@ One page, with no sidebar or separate workflow screens:
 
 - Name/address search, service/aspect/classification filters, and report-count/date/name sorting.
 - A paginated list beside the map, with consistent classification colors and selected-location highlighting.
-- Dated review excerpts and classification counts for the selected location, displayed below the list and map.
+- Accessibility categories default to locations with review excerpts for that category. Choose **Insufficient evidence** explicitly to inspect places without reported evidence. Scroll over the map to zoom in or out.
+- A compact evidence card below the list and map: the location summary stays visible above All, Barriers, Positive, and Mixed filters. Reviews scroll inside the card, with source IDs available under **Source details**.
+- A conversation-style review assistant with a bounded scroll area, suggested questions, and a composer below the answers. It starts with the selected location; turn off **Only the selected location** for the full scope. Each answer keeps its own applied scope, sources, priorities, and verification steps. Up to 20 exchanges stay in page memory until refresh; previous messages are never sent as question context.
 - Results import, clear empty states, closure indicators, and a missing-coordinate placeholder.
 
 Permanently closed places are removed upstream in the full notebook run; unknown closure status does not establish that a place is open. Previously stored organization records remain in the database for compatibility; the frontend has no work-item controls or related screens.
 
-The map renders up to the first 500 matching locations; the list is paginated and retains locations without coordinates. Details show up to 50 exported excerpts per access issue, with the total disclosed. Dates use UTC to preserve the source calendar day. Report counts are sampled evidence counts, not a universal accessibility score or population prevalence.
+The map renders up to the first 500 matching locations; the list is paginated and retains locations without coordinates. Evidence tabs count all exported excerpts for the selected access issue, load 50 at a time, and offer **Load more excerpts** inside the scroll area. Dates use UTC to preserve the source calendar day. Report counts are sampled evidence counts, not a universal accessibility score or population prevalence.
 
-Map code (Leaflet 1.9.4 and its license) is vendored locally. Esri street-map tiles require internet access and carry provider attribution. If tiles are unavailable, the location list and evidence remain usable. The navy/lavender interface follows the selected design and supports light/dark appearance and narrow screens.
+Map code (Leaflet 1.9.4 and its license) is vendored locally. Esri Light Gray Canvas tiles and reference labels require internet access and carry provider attribution. Labels sit beneath the colored markers, which use white outlines for contrast. If tiles are unavailable, the location list and evidence remain usable. The navy/lavender interface follows the selected design and supports light/dark appearance and narrow screens.
 
 ## Interchange format
 

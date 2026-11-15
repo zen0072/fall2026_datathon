@@ -55,6 +55,28 @@ class StoreTests(unittest.TestCase):
                 self.store.import_bundle(bad)
             self.assertEqual(self.store.metadata()["snapshot_id"], self.metadata["snapshot_id"])
 
+    def test_evidence_filter_matches_the_selected_aspect_before_pagination(self):
+        expected = {"physical": 3, "sensory": 1, "language": 3, "financial": 1, "time": 3}
+        for aspect, total in expected.items():
+            with self.subTest(aspect=aspect):
+                result = self.store.list_places(aspect=aspect, status="with_evidence", limit=1)
+                self.assertEqual(result["total"], total)
+                self.assertEqual(len(result["items"]), 1)
+                self.assertTrue(self.store.place_detail(result["items"][0]["place_id"], aspect)["evidence"])
+        clinics = self.store.list_places(aspect="physical", service="clinic", status="with_evidence")
+        self.assertEqual([p["place_id"] for p in clinics["items"]], ["demo_harbor"])
+        self.assertEqual(self.store.list_places(aspect="sensory", search="Pharmacy", status="with_evidence")["total"], 0)
+        self.assertEqual(self.store.list_places(aspect="sensory", status="insufficient_evidence")["total"], 3)
+        page = self.store.list_places(aspect="language", status="with_evidence", sort="name", limit=1, offset=1)
+        self.assertEqual(page["total"], 3)
+        self.assertEqual(page["items"][0]["place_id"], "demo_harbor")
+
+    def test_evidence_filter_requires_an_excerpt_in_the_active_snapshot(self):
+        refreshed = copy.deepcopy(self.payload)
+        refreshed["evidence"] = [e for e in refreshed["evidence"] if e["aspect"] != "sensory"]
+        self.store.import_bundle(refreshed)
+        self.assertEqual(self.store.list_places(aspect="sensory", status="with_evidence")["total"], 0)
+
     def test_idempotent_import_and_work_item_creation(self):
         again = self.store.import_bundle(self.payload)
         self.assertEqual(again["snapshot_id"], self.metadata["snapshot_id"])
@@ -63,6 +85,37 @@ class StoreTests(unittest.TestCase):
         language = self.store.create_work_item({"place_id": "demo_harbor", "aspect": "language"})
         self.assertEqual(first["id"], duplicate["id"])
         self.assertNotEqual(first["id"], language["id"])
+
+    def test_evidence_tabs_count_and_paginate_all_exported_excerpts(self):
+        payload = copy.deepcopy(self.payload)
+        payload["evidence"] = [e for e in payload["evidence"] if not (e["place_id"] == "demo_harbor" and e["aspect"] == "physical")]
+        states = ["barrier_reported"] * 40 + ["positive_access"] * 20 + ["unclear_or_mixed"] * 10
+        for index, state in enumerate(states):
+            payload["evidence"].append({"record_id": f"extra_{index:03d}", "place_id": "demo_harbor", "aspect": "physical", "state": state, "text": f"Fictional excerpt {index}", "date": "2026-11-01T00:00:00+00:00"})
+        next(p for p in payload["places"] if p["place_id"] == "demo_harbor")["sampled_reviews"] = 70
+        for aspect in payload["aspects"]:
+            if aspect["place_id"] == "demo_harbor":
+                aspect["sampled_reviews"] = 70
+                if aspect["aspect"] == "physical":
+                    aspect.update(barrier_reports=40, positive_reports=20, uncertain_reports=10)
+        self.store.import_bundle(payload)
+        first = self.store.place_detail("demo_harbor")
+        self.assertEqual(first["evidence_counts"], {"all": 70, "barrier_reported": 40, "positive_access": 20, "unclear_or_mixed": 10})
+        self.assertEqual(len(first["evidence"]), 50)
+        second = self.store.place_detail("demo_harbor", snapshot_id=first["snapshot_id"], evidence_offset=50)
+        self.assertEqual(second["evidence_total"], 70)
+        self.assertEqual(len(second["evidence"]), 20)
+        self.assertEqual(len({e["record_id"] for e in first["evidence"] + second["evidence"]}), 70)
+        positive = self.store.place_detail("demo_harbor", evidence_state="positive_access")
+        self.assertEqual(positive["evidence_total"], 20)
+        self.assertTrue(all(e["state"] == "positive_access" for e in positive["evidence"]))
+        empty = self.store.place_detail("demo_cedar", evidence_state="barrier_reported")
+        self.assertEqual(empty["evidence_total"], 0)
+        self.assertEqual(empty["evidence"], [])
+        with self.assertRaises(AppError):
+            self.store.place_detail("demo_harbor", evidence_state="invalid")
+        with self.assertRaises(AppError):
+            self.store.place_detail("demo_harbor", evidence_offset=-1)
 
     def test_prediction_refresh_and_restart_preserve_team_findings_and_evidence(self):
         work = self.store.create_work_item({"place_id": "demo_harbor", "aspect": "physical"})
@@ -133,6 +186,31 @@ class HTTPTests(unittest.TestCase):
         status, body, headers = self.request("/api/work-items.csv")
         self.assertEqual(status, 200); self.assertIn(b"Demo: check fees.", body)
         self.assertIn("attachment", headers["Content-Disposition"])
+
+    def test_evidence_filter_http_contract(self):
+        for aspect, total in (("physical", 3), ("sensory", 1), ("language", 3), ("financial", 1), ("time", 3)):
+            with self.subTest(aspect=aspect):
+                status, body, _ = self.request(f"/api/places?aspect={aspect}&status=with_evidence&limit=1")
+                self.assertEqual(status, 200)
+                result = json.loads(body)
+                self.assertEqual(result["total"], total)
+                self.assertEqual(len(result["items"]), 1)
+        status, body, _ = self.request("/api/places?aspect=physical&service=clinic&status=with_evidence")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["total"], 1)
+
+    def test_evidence_tabs_http_contract(self):
+        status, body, _ = self.request("/api/places/demo_harbor?aspect=physical&evidence_state=positive_access")
+        self.assertEqual(status, 200)
+        result = json.loads(body)
+        self.assertEqual(result["evidence_total"], 1)
+        self.assertEqual(result["evidence_counts"]["all"], 3)
+        self.assertEqual(result["evidence"][0]["state"], "positive_access")
+        status, body, _ = self.request("/api/places/demo_harbor?aspect=physical&evidence_state=barrier_reported&evidence_offset=1")
+        self.assertEqual(status, 200)
+        self.assertEqual(len(json.loads(body)["evidence"]), 1)
+        for suffix in ("evidence_state=invalid", "evidence_offset=-1", "evidence_offset=abc"):
+            self.assertEqual(self.request("/api/places/demo_harbor?" + suffix)[0], 400)
 
     def test_chat_http_contract(self):
         status, body, _ = self.request("/api/chat", "POST", {"question": "Which places need verification?", "service": "clinic"})

@@ -11,7 +11,7 @@ const statuses = {
   positive_access:{label:'Positive access',className:'positive'},
   unclear_or_mixed:{label:'Mixed or unclear',className:'mixed'}
 };
-const state = {aspect:'physical',service:'all',search:'',status:'all',sort:'barriers',offset:0,limit:20,metadata:null,items:[],total:0,selected:null};
+const state = {aspect:'physical',service:'all',search:'',status:'with_evidence',sort:'barriers',offset:0,limit:20,metadata:null,items:[],total:0,selected:null};
 let map, mapLayers, requestVersion=0, detailVersion=0, markers=new Map();
 const badge = status => {const s=statuses[status] || statuses.insufficient_evidence;return `<span class="badge ${s.className}">${s.label}</span>`;};
 const date = value => value ? new Date(value).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric',timeZone:'UTC'}) : 'Unknown date';
@@ -63,6 +63,7 @@ function syncFilters() {
   $('#report-status').value=state.status;
   $('#sort').value=state.sort;
   document.querySelectorAll('[data-aspect]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.aspect===state.aspect)));
+  syncChatContext();
 }
 
 async function loadLocations() {
@@ -77,7 +78,7 @@ async function loadLocations() {
     if (version!==requestVersion) return;
     state.items=result.items;state.total=result.total;
     if (!state.items.some(p=>p.place_id===state.selected)) state.selected=state.items[0]?.place_id || null;
-    renderList();renderMap(points.items,points.total);
+    renderList();renderMap(points.items,points.total);syncChatContext();
     await loadDetail();
   } finally {
     if (version===requestVersion) $('#locations-list').removeAttribute('aria-busy');
@@ -95,7 +96,7 @@ function renderList() {
 
 async function selectLocation(id,scroll=false) {
   state.selected=id;
-  renderList();updateMarkerSelection();
+  renderList();updateMarkerSelection();syncChatContext();
   await loadDetail();
   if (scroll) $('#location-detail').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth',block:'start'});
 }
@@ -103,9 +104,14 @@ async function selectLocation(id,scroll=false) {
 function initializeMap() {
   if (map) return true;
   if (!window.L) {$('#map-error').hidden=false;return false;}
-  map=L.map('map',{scrollWheelZoom:false}).setView([37.77,-122.3],9);
+  map=L.map('map',{scrollWheelZoom:true}).setView([37.77,-122.3],9);
   let loaded=0;
-  const tiles=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles &copy; Esri &mdash; Sources: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2012'}).addTo(map);
+  const attribution='Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>, GIS user community';
+  const tiles=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution}).addTo(map);
+  const labels=map.createPane('basemap-labels');
+  labels.style.zIndex=250;
+  labels.style.pointerEvents='none';
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',{pane:'basemap-labels',maxZoom:19,attribution}).addTo(map);
   tiles.on('tileload',()=>{loaded++;$('#map-error').hidden=true;});
   tiles.on('tileerror',()=>{if (!loaded && !$('#map').hidden) $('#map-error').hidden=false;});
   mapLayers=L.layerGroup().addTo(map);
@@ -128,13 +134,9 @@ function renderMap(points,total) {
   if (!initializeMap()) return;
   map.invalidateSize();mapLayers.clearLayers();markers=new Map();
   const css=getComputedStyle(document.documentElement);
-  const colors={reported_barrier:css.getPropertyValue('--warning').trim(),conflicting_or_unclear:css.getPropertyValue('--mixed').trim(),positive_evidence:css.getPropertyValue('--positive').trim(),insufficient_evidence:css.getPropertyValue('--muted').trim()};
-  // Resolve light-dark() in computed styles before giving a color to Leaflet.
-  const colorProbe=document.createElement('span');colorProbe.hidden=true;document.body.append(colorProbe);
-  for (const key of Object.keys(colors)) {colorProbe.style.color=colors[key];colors[key]=getComputedStyle(colorProbe).color;}
-  colorProbe.remove();
+  const colors={reported_barrier:css.getPropertyValue('--map-barrier').trim(),conflicting_or_unclear:css.getPropertyValue('--map-mixed').trim(),positive_evidence:css.getPropertyValue('--map-positive').trim(),insufficient_evidence:css.getPropertyValue('--map-unknown').trim()};
   for (const p of mappable) {
-    const marker=L.circleMarker([p.lat,p.lon],{radius:7,color:colors[p.status],fillColor:colors[p.status],fillOpacity:.9,weight:2}).addTo(mapLayers);
+    const marker=L.circleMarker([p.lat,p.lon],{radius:7,color:'#fff',fillColor:colors[p.status],fillOpacity:1,weight:2}).addTo(mapLayers);
     const tooltip=document.createElement('span');tooltip.textContent=`${p.name} · ${statuses[p.status].label}`;
     marker.bindTooltip(tooltip);
     marker.on('click',()=>run(selectLocation(p.place_id,true)));
@@ -147,16 +149,70 @@ function renderMap(points,total) {
 
 function updateMarkerSelection() {for (const [id,marker] of markers) marker.setRadius(id===state.selected?10:7);}
 
+const evidenceFilters=[['all','All'],['barrier_reported','Barriers'],['positive_access','Positive'],['unclear_or_mixed','Mixed']];
+let evidenceView=null;
+
+function renderEvidence(preserveScroll=false) {
+  const {result,filter}=evidenceView;
+  const scroll=$('#evidence-scroll');
+  const previousScroll=scroll.scrollTop;
+  document.querySelectorAll('[data-evidence-filter]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.evidenceFilter===filter)));
+  $('#evidence-items').innerHTML=result.evidence.length ? result.evidence.map(e=>`<article class="evidence-item"><div class="evidence-meta">${badge(e.state)}<span class="small muted">${date(e.review_date)}</span></div><blockquote>“${escapeHTML(e.text)}”</blockquote><details class="evidence-source"><summary>Source details</summary><p>Evidence ${escapeHTML(e.record_id)}</p></details></article>`).join('') : `<p class="evidence-empty muted">${filter==='all'?'No relevant excerpts are available for this access issue. Current conditions need verification.':'No excerpts match this evidence type. Try another tab.'}</p>`;
+  $('#evidence-load-more').hidden=result.evidence.length>=result.evidence_total;
+  $('#evidence-load-more').disabled=false;
+  const type={all:'',barrier_reported:'barrier ',positive_access:'positive ',unclear_or_mixed:'mixed '}[filter];
+  $('#evidence-count').textContent=`Showing ${number(result.evidence.length)} of ${number(result.evidence_total)} ${type}excerpts · Newest first`;
+  scroll.scrollTop=preserveScroll?previousScroll:0;
+}
+
+async function loadEvidence(filter,append=false) {
+  const view=evidenceView;
+  if (!view || (append && view.loading)) return;
+  const version=++detailVersion;
+  view.loading=true;
+  $('#evidence-scroll').setAttribute('aria-busy','true');
+  $('#evidence-load-more').disabled=true;
+  $('#evidence-count').textContent='Loading evidence…';
+  const params=new URLSearchParams({aspect:view.aspect,snapshot_id:view.result.snapshot_id,evidence_state:filter,evidence_offset:append?view.result.evidence.length:0});
+  try {
+    const result=await api(`/api/places/${encodeURIComponent(view.result.place.place_id)}?${params}`);
+    if (version!==detailVersion || evidenceView!==view) return;
+    if (append) result.evidence=[...view.result.evidence,...result.evidence];
+    view.result=result;view.filter=filter;
+    renderEvidence(append);
+  } catch(error) {
+    if (version===detailVersion && evidenceView===view) {
+      renderEvidence(true);
+      $('#evidence-count').textContent=`Could not load evidence: ${error.message} Try again.`;
+    }
+  } finally {
+    if (version===detailVersion && evidenceView===view) {
+      view.loading=false;
+      $('#evidence-scroll').removeAttribute('aria-busy');
+    }
+  }
+}
+
 async function loadDetail() {
   const version=++detailVersion;
-  if (!state.selected) {$('#location-detail').innerHTML='<p class="muted">Select a location to inspect its evidence.</p>';return;}
+  evidenceView=null;
+  if (!state.selected) {$('#location-detail').innerHTML='<p class="detail-empty muted">Select a location to inspect its evidence.</p>';return;}
   const params=new URLSearchParams({aspect:state.aspect});
   const result=await api(`/api/places/${encodeURIComponent(state.selected)}?${params}`);
   if (version!==detailVersion) return;
   const p=result.place;
   const a=result.aspects.find(a=>a.aspect===state.aspect);
-  $('#location-detail').innerHTML=`<div class="detail-heading"><span class="eyebrow">${services[p.service]} · ${aspects[state.aspect]}</span><h2>${escapeHTML(p.name)}</h2>${p.address?`<p class="small muted">${escapeHTML(p.address)}</p>`:''}<p class="small muted">${number(a.barrier_reports)} barrier · ${number(a.positive_reports)} positive · ${number(a.uncertain_reports)} mixed reports / ${number(a.sampled_reviews)} sampled reviews</p>${p.closure_status==='temporarily_closed'?'<span class="badge barrier">Reported temporarily closed</span>':''}</div><div class="evidence-grid">${result.evidence.length?result.evidence.map(e=>`<div class="evidence-item">${badge(e.state)}<blockquote>“${escapeHTML(e.text)}”</blockquote><p class="small muted">${date(e.review_date)} · Evidence ${escapeHTML(e.record_id)}</p></div>`).join(''):'<div class="evidence-item"><span class="badge">Insufficient evidence</span><p class="small muted">No relevant excerpts are available for this access issue. Current conditions need verification.</p></div>'}</div><p class="detail-footnote">Showing ${number(result.evidence.length)} of ${number(result.evidence_total)} excerpts. Classifications describe historical review text and need verification.</p>`;
+  evidenceView={result,aspect:state.aspect,filter:'all',loading:false};
+  syncChatContext();
+  $('#location-detail').innerHTML=`<header class="detail-heading"><span class="eyebrow">${services[p.service]} · ${aspects[state.aspect]}</span><h2>${escapeHTML(p.name)}</h2>${p.address?`<p class="small muted">${escapeHTML(p.address)}</p>`:''}<div class="detail-summary"><span>${number(a.barrier_reports)} barrier reports</span><span>${number(a.positive_reports)} positive</span><span>${number(a.uncertain_reports)} mixed</span><span class="muted">${number(a.sampled_reviews)} sampled reviews</span></div>${p.closure_status==='temporarily_closed'?'<span class="badge barrier">Reported temporarily closed</span>':''}</header><div class="evidence-tabs" role="group" aria-label="Filter review evidence">${evidenceFilters.map(([key,label])=>`<button type="button" data-evidence-filter="${key}" aria-pressed="${key==='all'}" aria-controls="evidence-scroll">${label} <span>${number(result.evidence_counts[key])}</span></button>`).join('')}</div><div id="evidence-scroll" class="evidence-scroll" role="region" aria-label="Review evidence" tabindex="0"><div id="evidence-items"></div><button id="evidence-load-more" type="button" class="button secondary" hidden>Load more excerpts</button></div><div class="detail-footnote"><p id="evidence-count" role="status" aria-live="polite"></p><p>Historical reviews · Verify current conditions</p></div>`;
+  renderEvidence();
 }
+
+$('#location-detail').addEventListener('click',event=>{
+  const button=event.target.closest('[data-evidence-filter]');
+  if (button) run(loadEvidence(button.dataset.evidenceFilter));
+  if (event.target.closest('#evidence-load-more') && evidenceView) run(loadEvidence(evidenceView.filter,true));
+});
 
 function filterChanged() {state.offset=0;run(loadLocations());}
 let searchTimer;
@@ -170,14 +226,25 @@ if (['#locations','#queue','#data'].includes(location.hash)) history.replaceStat
 run(loadData());
 
 let chatBusy=false;
+function syncChatContext() {
+  $('#chat-feedback').hidden=true;
+  $('#chat-context-aspect').textContent=aspects[state.aspect];
+  const selected=evidenceView?.result.place.place_id===state.selected ? evidenceView.result.place.name : state.items.find(p=>p.place_id===state.selected)?.name;
+  const scope=$('#chat-selected').checked ? (state.selected ? selected || 'Selected location' : 'Select a location above') : 'All matching locations';
+  const service=state.service==='all'?'All essential services':services[state.service];
+  $('#chat-context-place').textContent=[scope,service,state.search?`Search: ${state.search}`:'','All classifications'].filter(Boolean).join(' · ');
+}
+$('#chat-selected').addEventListener('change',syncChatContext);
+$('#chat-llm').addEventListener('change',()=>{$('#chat-mode-status').textContent=$('#chat-llm').checked?'OpenAI evidence selection':'Offline retrieval';});
 function renderChatConfig(config) {
   $('#chat-llm').disabled=!config.available;
   if (!config.available) $('#chat-llm').checked=false;
-  $('#chat-settings').hidden=!config.configurable;
+  $('#chat-key-settings').hidden=!config.configurable;
+  $('#chat-mode-status').textContent=$('#chat-llm').checked?'OpenAI evidence selection':'Offline retrieval';
   $('#chat-model').value=config.model || '';
   $('#chat-key-remove').disabled=!config.available;
   $('#chat-provider').textContent=config.available ? `Optional: use ${config.model} to select evidence. Your question and up to 24 review excerpts are sent to OpenAI. No conversation history is sent.` : config.configurable ? 'Offline retrieval active. Add your own key above to enable optional LLM evidence selection.' : 'Offline retrieval active. Configure server-side OpenAI credentials to enable optional LLM evidence selection.';
-  $('#chat-key-status').textContent=config.available ? 'A key is configured. Select “Use LLM evidence selection” below, then ask a question. Credentials have not been tested with OpenAI yet.' : 'No key is active. Offline retrieval is available without API credentials.';
+  $('#chat-key-status').textContent=config.available ? 'A key is configured. Select “Use OpenAI evidence selection” above, then ask a question. Credentials have not been tested with OpenAI yet.' : 'No key is active. Offline retrieval is available without API credentials.';
 }
 run(api('/api/chat/config').then(renderChatConfig));
 
@@ -208,18 +275,53 @@ $('#chat-settings-form').addEventListener('submit',event=>{
   run(updateChatSettings(payload));
 });
 $('#chat-key-remove').addEventListener('click',()=>run(updateChatSettings({clear:true})));
+function renderChatAnswer(result) {
+  const scope=result.scope;
+  const place=scope.place_id ? result.ranking.find(p=>p.place_id===scope.place_id)?.name || 'Selected location' : 'All matching locations';
+  const appliedScope=[aspects[scope.aspect],place,scope.service==='all'?'All essential services':services[scope.service],scope.search?`Search: ${scope.search}`:'','All classifications'].filter(Boolean).join(' · ');
+  return `<div class="chat-answer-heading"><span class="eyebrow">Review assistant</span><span class="chat-mode">${result.mode==='llm'?'OpenAI evidence selection':'Offline retrieval'}</span></div><p class="chat-answer-text">${escapeHTML(result.answer)}</p><p class="chat-answer-scope">${escapeHTML(appliedScope)}${scope.question_overrode_filters?' · Scope adjusted to the category or service named in your question.':''}</p><details class="chat-answer-details"><summary>View ${number(result.citations.length)} supporting excerpt${result.citations.length===1?'':'s'}</summary><div class="chat-sources">${result.citations.map(e=>`<article class="chat-source"><div class="chat-source-heading"><strong>[${escapeHTML(e.id)}] ${escapeHTML(e.name)}</strong>${badge(e.state)}</div><blockquote>“${escapeHTML(e.text)}”</blockquote><p class="chat-source-meta">${date(e.review_date)} · Record ${escapeHTML(e.record_id)}</p></article>`).join('') || '<p>No supporting excerpts are available in this scope.</p>'}</div></details><details class="chat-answer-details"><summary>Counts and verification priorities [A1]</summary><p class="small muted">${escapeHTML(result.ranking_method)}</p><ol>${result.ranking.map(p=>`<li><strong>${escapeHTML(p.name)}</strong>: ${number(p.barrier_reports)} barrier / ${number(p.positive_reports)} positive / ${number(p.uncertain_reports)} mixed reports from ${number(p.sampled_reviews)} reviews analyzed.</li>`).join('') || '<li>No matching locations.</li>'}</ol><p class="small muted">[A1] Imported place-aspect counts in snapshot ${escapeHTML(result.snapshot_id || 'none')}.</p></details><details class="chat-answer-details"><summary>What to verify</summary><ul>${result.suggestions.map(s=>`<li>${escapeHTML(s)}</li>`).join('')}</ul></details><details class="chat-answer-details"><summary>Scope and method</summary><p>${escapeHTML(result.provider_note)}</p><p>${escapeHTML(result.context_note)}</p><p>${escapeHTML(result.notice)}</p><p class="small muted">Dataset: ${escapeHTML(result.dataset?.mode || 'none')} · Labels: ${escapeHTML(result.dataset?.label_mode || 'unspecified')} · Snapshot ${escapeHTML(result.snapshot_id || 'none')}.</p></details><p class="chat-caution">Historical reviews · Verify current conditions</p>`;
+}
+
+document.querySelectorAll('[data-chat-prompt]').forEach(button=>button.addEventListener('click',()=>{
+  if (chatBusy) return;
+  $('#chat-question').value=button.dataset.chatPrompt;
+  $('#chat-form').requestSubmit();
+}));
+
+let chatTurnCount=0;
 $('#chat-form').addEventListener('submit',async event=>{
   event.preventDefault();
   if (chatBusy) return;
-  if ($('#chat-selected').checked && !state.selected) {notice('Select a location first.',true);return;}
+  const feedback=$('#chat-feedback');
+  feedback.hidden=true;
+  if ($('#chat-selected').checked && !state.selected) {feedback.textContent='Select a location above, or turn off “Only the selected location”.';feedback.hidden=false;return;}
   const question=$('#chat-question').value.trim();
   if (!question) return;
-  chatBusy=true;$('#chat-submit').disabled=true;$('#chat-results').setAttribute('aria-busy','true');
-  $('#chat-results').textContent='Reading the current results…';
+  const payload={question,aspect:state.aspect,service:state.service,search:state.search,place_id:$('#chat-selected').checked ? state.selected : '',use_llm:$('#chat-llm').checked};
+  const conversation=$('#chat-results');
+  $('#chat-empty')?.remove();
+  const turn=document.createElement('article');
+  turn.className='chat-turn';
+  turn.setAttribute('aria-label',`Question ${++chatTurnCount}`);
+  turn.innerHTML=`<p class="chat-question-bubble">${escapeHTML(question)}</p><div class="chat-answer"><p class="chat-pending">Reading the review evidence…</p></div>`;
+  conversation.append(turn);
+  while (conversation.children.length>20) conversation.firstElementChild.remove();
+  const reply=turn.querySelector('.chat-answer');
+  const showTurn=()=>{conversation.scrollTop+=turn.getBoundingClientRect().top-conversation.getBoundingClientRect().top-20;};
+  chatBusy=true;$('#chat-submit').disabled=true;conversation.setAttribute('aria-busy','true');
+  document.querySelectorAll('[data-chat-prompt]').forEach(button=>{button.disabled=true;});
+  $('#chat-question').value='';
+  showTurn();
   try {
-    const result=await api('/api/chat',{method:'POST',body:{question,aspect:state.aspect,service:state.service,search:state.search,place_id:$('#chat-selected').checked ? state.selected : '',use_llm:$('#chat-llm').checked}});
-    const scope=result.scope;
-    $('#chat-results').innerHTML=`<article class="chat-answer"><span class="badge">${result.mode==='llm'?'LLM evidence selection':'Offline retrieval'}</span><p><strong>${escapeHTML(question)}</strong></p><p>${escapeHTML(result.answer)}</p><p class="small muted">Scope: ${escapeHTML(aspects[scope.aspect])} · ${escapeHTML(scope.service)} · search: ${escapeHTML(scope.search || 'all')} · ${scope.place_id?'selected location':'all matching locations'} · all classifications. ${scope.question_overrode_filters?'Explicit aspect/service words in your question override those explorer filters. ':''}Snapshot ${escapeHTML(result.snapshot_id || 'none')}.</p><p class="small muted">${escapeHTML(result.provider_note)}</p><h3>Verification priority</h3><p class="small muted">${escapeHTML(result.ranking_method)}</p><ol>${result.ranking.map(p=>`<li><strong>${escapeHTML(p.name)}</strong>: ${number(p.barrier_reports)} barrier / ${number(p.positive_reports)} positive / ${number(p.uncertain_reports)} mixed reports from ${number(p.sampled_reviews)} sampled reviews [A1].</li>`).join('') || '<li>No matching locations.</li>'}</ol><h3>Review sources</h3><div class="chat-sources">${result.citations.map(e=>`<div class="chat-source"><strong>[${escapeHTML(e.id)}] ${escapeHTML(e.name)}</strong> ${badge(e.state)}<blockquote>${escapeHTML(e.text)}</blockquote><span class="small muted">Record ${escapeHTML(e.record_id)} · ${date(e.review_date)}</span></div>`).join('') || '<p>No supporting excerpts in this scope.</p>'}</div><p class="small muted">[A1] Imported place-aspect counts in snapshot ${escapeHTML(result.snapshot_id || 'none')}. ${escapeHTML(result.context_note)}</p><h3>Suggested verification steps</h3><ul>${result.suggestions.map(s=>`<li>${escapeHTML(s)}</li>`).join('')}</ul><p class="coverage-notice">${escapeHTML(result.notice)} Dataset mode: ${escapeHTML(result.dataset?.mode || 'none')}; labels: ${escapeHTML(result.dataset?.label_mode || 'unspecified')}.</p></article>`;
-  } catch(error) {$('#chat-results').textContent=error.message;}
-  finally {chatBusy=false;$('#chat-submit').disabled=false;$('#chat-results').setAttribute('aria-busy','false');}
+    const result=await api('/api/chat',{method:'POST',body:payload});
+    reply.innerHTML=renderChatAnswer(result);
+    showTurn();
+  } catch(error) {
+    reply.textContent=`Could not answer this question: ${error.message} You can try again below.`;
+    reply.classList.add('chat-answer-error');
+    if (!$('#chat-question').value) $('#chat-question').value=question;
+  } finally {
+    chatBusy=false;$('#chat-submit').disabled=false;conversation.setAttribute('aria-busy','false');
+    document.querySelectorAll('[data-chat-prompt]').forEach(button=>{button.disabled=false;});
+  }
 });
