@@ -2,11 +2,31 @@
 
 Reviewed November 14, 2026 (Pacific). Source: `zen0072/fall2026_datathon`, main commit `05ad25d35f053f210efca177ab198dccf795c3b3`.
 
-## Outcome
+## Current result: full local real-data run
+
+The user supplied the full Places CSV on November 14, 2026 (Pacific). Both full organizer files passed schema checks and were loaded locally: 147,429 Places rows and 213,536 Reviews rows. The actual notebook completed in real mode, passed its integrity checks, and exported/imported **word TF-IDF + logistic regression predictions** for **79 mapped locations, 1,868 retained reviews, and 365 aspect excerpts**. The frontend is now the requested single-page list/map explorer.
+
+The current database model is `tfidf_word`, not the earlier reviews-only keyword baseline. `FRONTEND_MODEL` controls explorer inference separately from the benchmark comparison winner. Keywords remain the comparison winner on rule-generated validation labels, so no advantage over the baseline is claimed. Serialized artifacts confirm a `TfidfVectorizer` and fitted logistic regressions for physical, language and time aspects. Sensory and financial labels have no training variation and use the documented constant no-mention fallback; their accessibility is unsupported.
+
+Source overlap is limited: 2,985 raw review rows have a Places ID match; after empty-review and closure filtering, 2,837 rows match (about 1.33% of eligible review rows). The retained essential-service subset has 1,868 reviews after 5 normalized duplicates are removed. Every exported location has valid coordinates. No human annotations were supplied, so training is provisional and independent test evaluation remains blocked. This verifies real-data execution and source/prediction integration, not real-world model accuracy.
+
+The suite passed all 13 tests, including an actual synthetic notebook export pinned to `tfidf_word` and imported unchanged into DuckDB, with nonbinary model probabilities. Private artifacts include source hashes, frozen selection, trained models, split manifest, the exact executed notebook source, run status/log and frontend JSON under ignored `outputs/real/`. Later notebook documentation updates do not alter the archived executed source.
+
+## Initial Colab review outcome
 
 The repository version did not run cleanly in the current Colab environment. The included corrected notebook passes synthetic execution and interactive dashboard checks. A full real-data run remains blocked by the organizer's Google Drive download quota. Do not describe this as completed real-data verification or validated model performance.
 
-## Fixed
+## Follow-up: actual Reviews file and explicit partial frontend run
+
+On November 14, 2026 (Pacific), the connected Google Drive download succeeded for the **full Reviews CSV**: 221,618,514 bytes, 213,536 rows, 6,108 place IDs, SHA-256 `1787435e1efbaddd88256efe38d481cec2b442e754bbe3d6b9e9e03d7a8674d0`. The file is cached under ignored `data/`. The full Places CSV remains blocked by Google Drive quota in both the public downloader and normal browser flow; the connector also rejects its 506,418,083 bytes because of its 256 MB limit. No quota bypass or sample substitution was used.
+
+The user explicitly approved loading a **reviews-only** subset. `scripts/import_real_reviews.py` extracts the notebook's current keyword baseline, builds business metadata from nonempty review fields, and exports/imports an explicitly partial snapshot. Only 79 of 6,108 business IDs have any review category. Existing service rules identify 7 candidate clinic locations; normalized exact deduplication retains 733 reviews and 68 aspect excerpts. Pharmacy/grocery matches are absent from this limited category coverage, not established absent from the region. The app displays the source gap, missing coordinates and unknown closure status. Actual addresses include businesses outside the Bay Area; this subset has no regional filter.
+
+This is **real source ingestion and provisional keyword screening**, not a full notebook run, a two-dataset join, trained-model fitting, or independent model validation. Observed keyword errors include recovery narratives containing “wheelchair” or “stairs” without a facility-access issue. No accuracy scores or probability values are supplied for this run. Source hashes, baseline hash, counts and limitations are stored with the snapshot; raw reviewer identity columns are excluded from derived analysis records. The expanded suite passed all 13 tests, including sparse category propagation, duplicate screening, unknown dates, no fabricated coordinates, preserved contradictions, and rejection of an incompatible source file.
+
+Browser verification confirmed the 7 real candidate locations, missing-coordinate placeholder, partial-source warning, the 213,536/6,108/79 source-coverage counts, and the explicit no-training/no-evaluation status. No JavaScript errors were recorded.
+
+## Fixed in the earlier notebook review
 
 1. **Python 3.13 installation:** Colab reported Python 3.13.18. NumPy 2.0.2 fell back to a lengthy source build because no matching wheel was available. Updated to NumPy 2.2.6 and added `--only-binary=:all:` to the install cell. Installation of the corrected pins completed in Colab.
 2. **Colab environment compatibility:** SciPy 1.14.1 conflicted with preinstalled JAX's SciPy >=1.15 requirement. Updated to SciPy 1.15.3. Notebook and requirements pins match.

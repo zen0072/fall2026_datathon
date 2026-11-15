@@ -1,0 +1,2 @@
+# The web app imports prepared results; notebook/model dependencies stay separate.
+duckdb==1.4.4

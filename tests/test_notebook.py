@@ -6,6 +6,7 @@ import contextlib
 import io
 import json
 import os
+import re
 from pathlib import Path
 import tempfile
 import unittest
@@ -14,7 +15,7 @@ NOTEBOOK = Path(__file__).resolve().parents[1] / "Access_Beyond_the_Map.ipynb"
 
 
 class NotebookIntegration(unittest.TestCase):
-    def run_pipeline(self, provisional=False):
+    def run_pipeline(self, provisional=False, prediction_model="validation_winner"):
         notebook = json.loads(NOTEBOOK.read_text())
         ns = {}
         previous = Path.cwd()
@@ -29,6 +30,7 @@ class NotebookIntegration(unittest.TestCase):
                         continue
                     if index == 4:
                         source = source.replace('MODE = "real"', 'MODE = "synthetic"')
+                        source = re.sub(r'^FRONTEND_MODEL = "[^"]*"', f'FRONTEND_MODEL = "{prediction_model}"', source, count=1, flags=re.M)
                         source = source.replace('DATA_DIR = Path("/content/data" if Path("/content").exists() else "data")', 'DATA_DIR = Path("data")')
                     if index == 14 and provisional:
                         # Exercise the real-mode no-human-label path on generated data.
@@ -48,6 +50,9 @@ class NotebookIntegration(unittest.TestCase):
                 self.assertTrue((ns["OUT"] / "map_PRIVATE.html").is_file())
                 self.assertTrue((ns["OUT"] / "submission_preflight.json").is_file())
                 self.assertTrue(Path(ns["bundle"]).is_file())
+                frontend_results = json.loads((ns["OUT"] / "frontend_results_PRIVATE.json").read_text())
+                self.assertEqual(frontend_results["schema_version"], 1)
+                self.assertEqual(len(frontend_results["places"]), ns["df"].place_id.nunique())
                 # Exercise widget callbacks, including an empty filter result.
                 ns["service_w"].value = "pharmacy"
                 ns["aspect_w"].value = "language"
@@ -61,6 +66,7 @@ class NotebookIntegration(unittest.TestCase):
                 else:
                     self.assertEqual(len(ns["metrics"]["models"]), 3)
                     self.assertEqual(len(ns["subgroup_rows"]), 3)
+                return frontend_results
             finally:
                 os.chdir(previous)
 

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Access Beyond the Map · Access explorer</title>
+  <meta name="description" content="Explore classified accessibility issues through a location list, map, and supporting review evidence.">
+  <link rel="stylesheet" href="/vendor/leaflet.css">
+  <link rel="stylesheet" href="/styles.css">
+  <script defer src="/vendor/leaflet.js"></script>
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <div class="app-shell">
+    <header class="masthead">
+      <a href="/" class="brand"><span class="brand-symbol" aria-hidden="true">↗</span><span>Access Beyond the Map</span></a>
+      <div class="header-actions"><span id="dataset-badge" class="dataset-badge">Loading results</span><label class="button secondary import-button">Import results<input id="import-file" aria-label="Import results" type="file" accept=".json,application/json"></label></div>
+    </header>
+
+    <main id="main" class="main-content">
+      <div class="page-intro"><span class="eyebrow">Essential services · Accessibility</span><h1>Explore reported access barriers.</h1><p>Find classified accessibility issues on the list and map, then select a place to read the review evidence.</p></div>
+      <div id="notice" role="status" aria-live="polite" hidden></div>
+      <div id="coverage-notice" class="coverage-notice" role="note" hidden></div>
+      <section id="empty-state" class="panel empty-state" hidden>
+        <span class="eyebrow">Ready for your results</span><h2>Bring your classified places onto the map</h2>
+        <p>Import the results file from a notebook run to explore locations and their accessibility classifications.</p>
+      </section>
+
+      <section id="locations-page" aria-label="Location explorer">
+        <div class="filters">
+          <label>Search locations<input id="search" type="search" placeholder="Name or address" maxlength="200"></label>
+          <label>Service<select id="service"><option value="all">All essential services</option><option value="clinic">Clinics</option><option value="pharmacy">Pharmacies</option><option value="grocery">Groceries</option></select></label>
+          <label>Classification<select id="report-status"><option value="all">All classifications</option><option value="reported_barrier">Barrier reports</option><option value="conflicting_or_unclear">Mixed or unclear</option><option value="positive_evidence">Positive evidence</option><option value="insufficient_evidence">Insufficient evidence</option></select></label>
+          <label>Sort by<select id="sort"><option value="barriers">Barrier report count</option><option value="recent">Most recent review</option><option value="name">Location name</option></select></label>
+        </div>
+        <div id="aspect-filters" class="aspect-filters" role="group" aria-label="Access issue">
+          <button type="button" data-aspect="physical" aria-pressed="true">Physical</button><button type="button" data-aspect="sensory" aria-pressed="false">Sensory</button><button type="button" data-aspect="language" aria-pressed="false">Language</button><button type="button" data-aspect="financial" aria-pressed="false">Cost</button><button type="button" data-aspect="time" aria-pressed="false">Time</button>
+        </div>
+        <div class="explorer panel">
+          <section class="location-list" aria-label="Matching locations"><div id="results-count" class="list-heading" aria-live="polite">Loading locations…</div><div id="locations-list"></div><div class="pagination"><button id="previous-page" type="button" class="button secondary">Previous</button><button id="next-page" type="button" class="button secondary">Next</button></div></section>
+          <section class="map-section" aria-label="Map of matching locations"><div id="map"></div><div id="map-placeholder" class="map-placeholder" hidden><div><span class="eyebrow">Location map</span><h2 id="map-placeholder-title">Coordinates not available</h2><p id="map-placeholder-description">The current results have no map coordinates. You can explore classifications and review evidence in the list.</p></div></div><div id="map-caption" class="map-caption"></div><div id="map-error" class="map-error" role="status" hidden>Basemap unavailable. The location list and evidence are still available.</div></section>
+        </div>
+        <div class="map-legend" aria-label="Classification legend"><span><i class="dot barrier"></i>Barrier reported</span><span><i class="dot mixed"></i>Mixed or unclear</span><span><i class="dot positive"></i>Positive evidence</span><span><i class="dot unknown"></i>Insufficient evidence</span></div>
+        <article id="location-detail" class="panel location-detail" aria-live="polite"><p class="muted">Select a location to inspect its evidence.</p></article>
+      </section>
+
+      <footer>Reported experiences help identify places to review. They do not verify current accessibility.<span>Dates shown in UTC</span></footer>
+    </main>
+  </div>
+</body>
+</html>
