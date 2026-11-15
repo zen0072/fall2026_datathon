@@ -11,11 +11,13 @@ from pathlib import Path
 import tempfile
 import unittest
 
+os.environ.setdefault("MPLBACKEND", "Agg")
+
 NOTEBOOK = Path(__file__).resolve().parents[1] / "Access_Beyond_the_Map.ipynb"
 
 
 class NotebookIntegration(unittest.TestCase):
-    def run_pipeline(self, provisional=False, prediction_model="validation_winner"):
+    def run_pipeline(self, provisional=False, prediction_model="validation_winner", fallback=False):
         notebook = json.loads(NOTEBOOK.read_text())
         ns = {}
         previous = Path.cwd()
@@ -28,21 +30,48 @@ class NotebookIntegration(unittest.TestCase):
                     source = "".join(cell["source"])
                     if source.lstrip().startswith("%pip"):
                         continue
-                    if index == 4:
+                    if re.search(r'^FRONTEND_MODEL = ', source, flags=re.M):
                         source = source.replace('MODE = "real"', 'MODE = "synthetic"')
                         source = re.sub(r'^FRONTEND_MODEL = "[^"]*"', f'FRONTEND_MODEL = "{prediction_model}"', source, count=1, flags=re.M)
                         source = source.replace('DATA_DIR = Path("/content/data" if Path("/content").exists() else "data")', 'DATA_DIR = Path("data")')
-                    if index == 14 and provisional:
+                    if "def load_gold(" in source and provisional:
                         # Exercise the real-mode no-human-label path on generated data.
                         ns["MODE"] = "real"
                     exec(compile(source, f"cell_{index}", "exec"), ns)
-                    if index == 8:
+                    if "synthetic_truth = {}" in source:
                         raw = ns["places_raw"]
                         raw["permanently_closed"] = "False"
                         raw.loc[0, "permanently_closed"] = "True"
                         raw.loc[1, "permanently_closed"] = "unknown"
                         raw["temporarily_closed"] = "False"
                         raw.loc[2, "temporarily_closed"] = "True"
+                        if fallback:
+                            reviews = ns["reviews_raw"]
+                            raw["cid"] = [str(1000 + i) for i in range(len(raw))]
+                            reviews["cid"] = reviews.place_id.map(raw.set_index("place_id").cid)
+                            # Alias five reviews to another source ID but keep their unique CID.
+                            changed = reviews.place_id.eq("fixture_003")
+                            for row in reviews.loc[changed].itertuples():
+                                old = ns["digest"](row.place_id + "|" + row.review)[:24]
+                                new = ns["digest"]("alias_003|" + row.review)[:24]
+                                ns["synthetic_truth"][new] = ns["synthetic_truth"].pop(old)
+                            reviews.loc[changed, "place_id"] = "alias_003"
+                            # A closed source ID advertises an open place's CID: exact ID wins.
+                            reviews.loc[reviews.place_id.eq("fixture_000"), "cid"] = "1001"
+                if fallback:
+                    crosswalk = ns["crosswalk"].set_index("source_place_id")
+                    self.assertEqual(crosswalk.loc["alias_003", "place_id"], "fixture_003")
+                    self.assertEqual(crosswalk.loc["alias_003", "match_method"], "cid_or_fid")
+                    self.assertEqual(crosswalk.loc["fixture_000", "place_id"], "fixture_000")
+                    self.assertTrue(crosswalk.loc["fixture_000", "excluded_permanently_closed"])
+                    self.assertNotIn("fixture_000", set(ns["joined"].source_place_id))
+                    recovered = ns["joined"][ns["joined"].source_place_id.eq("alias_003")]
+                    self.assertEqual(len(recovered), 5)
+                    self.assertTrue(recovered.place_id.eq("fixture_003").all())
+                    for row in recovered.itertuples():
+                        self.assertEqual(row.record_id, ns["digest"]("alias_003|" + row.review)[:24])
+                    canonical = ns["df"][ns["df"].place_id.eq("fixture_003")]
+                    self.assertEqual(canonical.split.nunique(), 1)
                 self.assertNotIn("fixture_000", set(ns["p"].place_id))
                 self.assertIn("fixture_001", set(ns["p"].place_id))
                 self.assertEqual(ns["p"].set_index("place_id").loc["fixture_002", "closure_status"], "temporarily_closed")
@@ -64,7 +93,7 @@ class NotebookIntegration(unittest.TestCase):
                     self.assertEqual(ns["metrics"]["models"], {})
                     self.assertIn("BLOCKED", ns["EVALUATION_STATUS"])
                 else:
-                    self.assertEqual(len(ns["metrics"]["models"]), 3)
+                    self.assertEqual(set(ns["metrics"]["models"]), {"keywords", "majority", "tfidf_word", "tfidf_word_char", "tfidf_nb"})
                     self.assertEqual(len(ns["subgroup_rows"]), 3)
                 return frontend_results
             finally:
@@ -72,6 +101,9 @@ class NotebookIntegration(unittest.TestCase):
 
     def test_synthetic_with_closed_and_unknown_locations(self):
         self.run_pipeline()
+
+    def test_fallback_preserves_source_identity_and_excludes_closed(self):
+        self.run_pipeline(fallback=True, prediction_model="tfidf_nb")
 
     def test_provisional_without_human_labels(self):
         self.run_pipeline(provisional=True)

@@ -131,6 +131,19 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(status, 200); self.assertIn(b"Demo: check fees.", body)
         self.assertIn("attachment", headers["Content-Disposition"])
 
+    def test_chat_http_contract(self):
+        status, body, _ = self.request("/api/chat", "POST", {"question": "Which places need verification?", "service": "clinic"})
+        self.assertEqual(status, 200)
+        result = json.loads(body)
+        self.assertEqual(result["aggregate"]["locations"], 2)
+        self.assertEqual(result["mode"], "retrieval")
+        self.assertTrue(result["citations"])
+        self.assertEqual(self.request("/api/chat", "POST", {"question": "x" * 1501})[0], 400)
+        self.assertEqual(self.request("/api/chat", "POST", {"question": "x"}, {"Origin": "https://example.invalid"})[0], 403)
+        status, body, _ = self.request("/api/chat/config")
+        self.assertEqual(status, 200)
+        self.assertNotIn("key", json.loads(body))
+
     def test_invalid_requests_and_static_file_boundary(self):
         self.assertEqual(self.request("/api/places?limit=-1")[0], 400)
         self.assertEqual(self.request("/api/places?unknown=1")[0], 400)

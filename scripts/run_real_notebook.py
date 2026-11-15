@@ -21,7 +21,7 @@ sys.path.insert(0, str(ROOT))
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--prediction-model", choices=("tfidf_word", "tfidf_word_char", "validation_winner"), default="tfidf_word")
+    parser.add_argument("--prediction-model", choices=("tfidf_word", "tfidf_word_char", "tfidf_nb", "validation_winner"), default="tfidf_word")
     parser.add_argument("--db", type=Path, help="Import only after a successful run; stop the app first")
     args = parser.parse_args()
     os.chdir(ROOT)
@@ -44,7 +44,7 @@ def main():
                 source = "".join(cell["source"])
                 if cell["cell_type"] != "code" or source.lstrip().startswith("%pip"):
                     continue
-                if index == 4:
+                if re.search(r'^FRONTEND_MODEL = ', source, flags=re.M):
                     source = re.sub(r'^FRONTEND_MODEL = "[^"]*"', f'FRONTEND_MODEL = "{args.prediction_model}"', source, count=1, flags=re.M)
                     source = source.replace('DATA_DIR = Path("/content/data" if Path("/content").exists() else "data")', 'DATA_DIR = Path("data")')
                 status.update(cell_index=index, elapsed_seconds=round(time.monotonic() - started, 2))

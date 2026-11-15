@@ -6,6 +6,12 @@ A single-page explorer of classified accessibility issues at essential services.
 
 [View the slide deck (PDF)](slides/Access_Beyond_the_Map.pdf)
 
+## Improvements in this checkout
+
+This version adds conservative alternate-ID/name-address matching, a five-model comparison including Naive Bayes and a majority baseline, separate human-annotation handoffs, an evidence chatbot, and an optional OSM context adapter. See [IMPROVEMENTS.md](IMPROVEMENTS.md) for commands, measured input coverage, limitations and optional LLM setup.
+
+**Current verification boundary:** the full Reviews file was obtained again, but the Places source is quota-blocked. The historical full-data results below have not been regenerated with these changes. Independent human evaluation remains pending. The app can be tested with the explicitly fictional demo until a real notebook export is available.
+
 ## Run the local app
 
 Use Python 3.11–3.13 (3.12 recommended alongside the notebook).
@@ -37,7 +43,7 @@ The app serves its frontend and JSON API from one Python process and persists re
 
 The browser import limit is 128 MB; use the CLI for larger results files. Refresh the browser after a CLI import. The notebook's existing real-data acquisition and human-label requirements still apply: the app does not bypass download quotas, train models on requests, or turn rule labels into independent evaluation.
 
-## Current real-data run: TF-IDF + logistic regression
+## Historical real-data run: TF-IDF + logistic regression
 
 Both full organizer files are cached in ignored `data/`: **Places** has 147,429 rows (506,418,083 bytes) and **Reviews** has 213,536 rows (221,618,514 bytes). Source SHA-256 hashes are recorded in `outputs/real/sources.json` and the imported snapshot. The user supplied the full Places CSV after the earlier Drive quota block.
 

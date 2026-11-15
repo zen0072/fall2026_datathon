@@ -45,6 +45,18 @@
         <article id="location-detail" class="panel location-detail" aria-live="polite"><p class="muted">Select a location to inspect its evidence.</p></article>
       </section>
 
+      <section class="panel chat-panel" aria-labelledby="chat-title">
+        <span class="eyebrow">Evidence assistant</span><h2 id="chat-title">Ask the review data</h2>
+        <p class="muted">Explore reports, compare verification priorities and plan what to check. Uses the aspect, service and location search above; includes all classifications.</p>
+        <form id="chat-form">
+          <label for="chat-question">Your question<input id="chat-question" maxlength="1500" required placeholder="Which locations should we verify first, and why?"></label>
+          <div class="chat-options"><label><input id="chat-selected" type="checkbox"> Only the selected location</label><label><input id="chat-llm" type="checkbox" disabled> Use LLM evidence selection</label></div>
+          <p id="chat-provider" class="small muted">Offline retrieval is available without API credentials.</p>
+          <button id="chat-submit" type="submit" class="button secondary">Ask the data</button>
+        </form>
+        <div id="chat-results" aria-live="polite" aria-busy="false"></div>
+      </section>
+
       <footer>Reported experiences help identify places to review. They do not verify current accessibility.<span>Dates shown in UTC</span></footer>
     </main>
   </div>

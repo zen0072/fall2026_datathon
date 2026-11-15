@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from .schema import AppError
+from .chat import answer as chat_answer, config as chat_config
 
 STATIC = Path(__file__).parent / "static"
 MAX_IMPORT_BYTES = 128 * 1024 * 1024
@@ -67,6 +68,8 @@ def make_server(store, host="127.0.0.1", port=8000):
             path = unquote(parsed.path)
             query = {key: values[-1] for key, values in parse_qs(parsed.query).items()}
             if self.command == "GET":
+                if path == "/api/chat/config":
+                    return self._send(200, chat_config())
                 if path == "/api/health":
                     return self._send(200, {"ok": True, "storage": "duckdb"})
                 if path == "/api/metadata":
@@ -97,6 +100,8 @@ def make_server(store, host="127.0.0.1", port=8000):
                 if not target.is_relative_to(STATIC.resolve()) or not target.is_file():
                     raise AppError("Page not found.", 404)
                 return self._send(200, target.read_bytes(), mimetypes.guess_type(target.name)[0] or "application/octet-stream")
+            if self.command == "POST" and path == "/api/chat":
+                return self._send(200, chat_answer(store, self._json_body()))
             if self.command == "POST" and path == "/api/import":
                 return self._send(200, store.import_bundle(self._json_body()))
             if self.command == "POST" and path == "/api/work-items":

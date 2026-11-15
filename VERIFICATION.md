@@ -1,3 +1,11 @@
+# Current improvement verification — November 15, 2026
+
+See [IMPROVEMENTS.md](IMPROVEMENTS.md) for the changes in this checkout and reproducible commands. The final combined suite passed **39 tests**, including HTTP/chat, alternative matching, closure safety, model/annotation invariants and notebook-to-app integration. JavaScript syntax and diff whitespace checks passed.
+
+The full Reviews file was obtained and profiled again. The Places download remains quota-blocked, so a new real-data join/training run and coverage gain are not established. Human evaluation, live LLM calls, real OSM enrichment and visual browser QA remain uncompleted. Browser origin approval was declined for Drive and localhost. The earlier results below are historical; they are not claims about this new checkout.
+
+---
+
 # Colab verification and implementation review
 
 Reviewed November 14, 2026 (Pacific). Source: `zen0072/fall2026_datathon`, main commit `05ad25d35f053f210efca177ab198dccf795c3b3`.

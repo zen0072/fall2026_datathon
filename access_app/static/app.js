@@ -183,3 +183,24 @@ $('#import-file').addEventListener('change',event=>run((async()=>{
 matchMedia('(prefers-color-scheme:dark)').addEventListener('change',()=>{if (state.metadata?.snapshot_id) run(loadLocations());});
 if (['#locations','#queue','#data'].includes(location.hash)) history.replaceState(null,'',location.pathname+location.search);
 run(loadData());
+
+let chatBusy=false;
+api('/api/chat/config').then(config=>{
+  $('#chat-llm').disabled=!config.available;
+  $('#chat-provider').textContent=config.available ? 'Optional: send your question and up to 24 review excerpts to OpenAI for evidence selection. No conversation history is sent.' : 'Offline retrieval active. Configure server-side OpenAI credentials to enable optional LLM evidence selection.';
+}).catch(()=>{});
+$('#chat-form').addEventListener('submit',async event=>{
+  event.preventDefault();
+  if (chatBusy) return;
+  if ($('#chat-selected').checked && !state.selected) {notice('Select a location first.',true);return;}
+  const question=$('#chat-question').value.trim();
+  if (!question) return;
+  chatBusy=true;$('#chat-submit').disabled=true;$('#chat-results').setAttribute('aria-busy','true');
+  $('#chat-results').textContent='Reading the current results…';
+  try {
+    const result=await api('/api/chat',{method:'POST',body:{question,aspect:state.aspect,service:state.service,search:state.search,place_id:$('#chat-selected').checked ? state.selected : '',use_llm:$('#chat-llm').checked}});
+    const scope=result.scope;
+    $('#chat-results').innerHTML=`<article class="chat-answer"><span class="badge">${result.mode==='llm'?'LLM evidence selection':'Offline retrieval'}</span><p><strong>${escapeHTML(question)}</strong></p><p>${escapeHTML(result.answer)}</p><p class="small muted">Scope: ${escapeHTML(aspects[scope.aspect])} · ${escapeHTML(scope.service)} · search: ${escapeHTML(scope.search || 'all')} · ${scope.place_id?'selected location':'all matching locations'} · all classifications. ${scope.question_overrode_filters?'Explicit aspect/service words in your question override those explorer filters. ':''}Snapshot ${escapeHTML(result.snapshot_id || 'none')}.</p><p class="small muted">${escapeHTML(result.provider_note)}</p><h3>Verification priority</h3><p class="small muted">${escapeHTML(result.ranking_method)}</p><ol>${result.ranking.map(p=>`<li><strong>${escapeHTML(p.name)}</strong>: ${number(p.barrier_reports)} barrier / ${number(p.positive_reports)} positive / ${number(p.uncertain_reports)} mixed reports from ${number(p.sampled_reviews)} sampled reviews [A1].</li>`).join('') || '<li>No matching locations.</li>'}</ol><h3>Review sources</h3><div class="chat-sources">${result.citations.map(e=>`<div class="chat-source"><strong>[${escapeHTML(e.id)}] ${escapeHTML(e.name)}</strong> ${badge(e.state)}<blockquote>${escapeHTML(e.text)}</blockquote><span class="small muted">Record ${escapeHTML(e.record_id)} · ${date(e.review_date)}</span></div>`).join('') || '<p>No supporting excerpts in this scope.</p>'}</div><p class="small muted">[A1] Imported place-aspect counts in snapshot ${escapeHTML(result.snapshot_id || 'none')}. ${escapeHTML(result.context_note)}</p><h3>Suggested verification steps</h3><ul>${result.suggestions.map(s=>`<li>${escapeHTML(s)}</li>`).join('')}</ul><p class="coverage-notice">${escapeHTML(result.notice)} Dataset mode: ${escapeHTML(result.dataset?.mode || 'none')}; labels: ${escapeHTML(result.dataset?.label_mode || 'unspecified')}.</p></article>`;
+  } catch(error) {$('#chat-results').textContent=error.message;}
+  finally {chatBusy=false;$('#chat-submit').disabled=false;$('#chat-results').setAttribute('aria-busy','false');}
+});
