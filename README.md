@@ -2,6 +2,10 @@
 
 A single-page explorer of classified accessibility issues at essential services. Browse the location list and map, filter by access aspect, and select a place to inspect its review evidence.
 
+## 📊 Presentation
+
+[View the slide deck (PDF)](slides/Access_Beyond_the_Map.pdf)
+
 ## Run the local app
 
 Use Python 3.11–3.13 (3.12 recommended alongside the notebook).
