@@ -16,6 +16,8 @@ This version adds conservative alternate-ID/name-address matching, a five-model 
 
 ## Run the local app
 
+For a verified step-by-step setup, see [Run locally](docs/RUN_LOCALLY.md), including macOS/Linux and Windows commands, real-results import, optional LLM setup and troubleshooting.
+
 Use Python 3.11–3.13 (3.12 recommended alongside the notebook).
 
 ```sh
