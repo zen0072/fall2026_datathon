@@ -20,6 +20,12 @@ The launcher creates a virtual environment, installs dependencies, loads the inc
 - **Restart:** run the launch command again.
 - **Port busy:** add `--port 8001` to the launch command.
 
+## Classify your own data
+
+[![Launch classification notebook on Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/zen0072/fall2026_datathon/main?urlpath=lab/tree/Classify_Your_Own_Data.ipynb)
+
+Open the [classification notebook](Classify_Your_Own_Data.ipynb) to run **keyword rules, TF-IDF + Logistic Regression, or LLM classification with your own OpenAI API key** without using our saved predictions. Try the invented example, then upload a CSV with `place_id` and `review` columns. The LLM option uses masked key entry and explicit paid-request limits. Human annotations are optional; accuracy is evaluated only when you supply human labels for held-out locations. Download your results before the Binder session ends. See [notebook setup and limits](binder/README.md) for details.
+
 ## Add an API key (optional)
 
 The map and offline chatbot work without an API key. To enable OpenAI evidence selection:

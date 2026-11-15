@@ -1,0 +1,12 @@
+# Independent classification notebook; the app and saved results are not needed.
+numpy==2.2.6
+pandas==2.2.3
+scipy==1.15.3
+scikit-learn==1.6.1
+joblib==1.4.2
+threadpoolctl==3.6.0
+ipython==8.32.0
+ipykernel==6.29.5
+nbformat==5.10.4
+nbclient==0.10.2
+jupyterlab==4.4.3

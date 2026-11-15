@@ -1,0 +1,5 @@
+#!/bin/bash
+set -euo pipefail
+python scripts/check_classification_notebook.py
+python scripts/check_classification_notebook.py --method tfidf_logreg
+python scripts/check_classification_notebook.py --method llm
