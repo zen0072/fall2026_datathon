@@ -1,0 +1,52 @@
+flowchart TB
+  subgraph batch["Batch processing - notebook or local runner"]
+    P["Places CSV: IDs, categories, coordinates, closure flags"]
+    R["Reviews CSV: business metadata, text, dates"]
+    J["Validate, match businesses, exclude closed places"]
+    D["Scope services, deduplicate, split by canonical place"]
+    H["Human annotations or disclosed provisional rule labels"]
+    M["Compare 3 trained candidates and 2 baselines"]
+    E["Freeze thresholds and selection; evaluate reserved labels"]
+    A["Selected model predicts retained reviews; extract and aggregate evidence"]
+    F["Versioned frontend_results_PRIVATE.json"]
+    P --> J
+    R --> J
+    J --> D
+    D --> H
+    H --> M
+    M --> E
+    E --> A
+    D --> A
+    A --> F
+  end
+  subgraph app["Local application - one Python server"]
+    I["Validate import and transact"]
+    DB[("DuckDB snapshots, places, aspects, evidence")]
+    API["JSON API: metadata, places, details"]
+    C["Chat: parse intent and scope; query counts and ranked evidence"]
+    V["Validate citation IDs; preserve counterevidence; render templates"]
+    I --> DB
+    DB --> API
+    DB --> C
+    C -->|"Offline selection"| V
+  end
+  subgraph browser["Browser"]
+    U["HTML and JavaScript: import, filters, map, details, chat"]
+    L["Leaflet map"]
+    U --> L
+  end
+  O["Optional OpenAI Responses API: select evidence IDs"]
+  T["Esri basemap tiles"]
+  X["Optional local OSM Point GeoJSON"]
+  Y["Separate OSM context CSV; not consumed by website"]
+  F --> I
+  U -->|"Import JSON"| I
+  U -->|"Browse requests"| API
+  API -->|"Stored classifications and excerpts"| U
+  U -->|"Question, filters, LLM opt-in"| C
+  C -->|"Opt-in: question and at most 24 excerpts"| O
+  O -->|"source_ids JSON"| V
+  V -->|"Counts, priorities, citations, verification steps"| U
+  L -->|"Tile requests"| T
+  X -.-> Y
+  P -.-> Y

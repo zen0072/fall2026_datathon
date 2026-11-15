@@ -2,6 +2,8 @@
 
 A single-page explorer of classified accessibility issues at essential services. Browse the location list and map, filter by access aspect, and select a place to inspect its review evidence.
 
+Read the [complete system design and website walkthrough](docs/SYSTEM_DESIGN.md) for the architecture diagram, every processing stage, model inputs/outputs, database contracts and chatbot flow. The [editable diagram source](docs/diagrams/system-design.mmd) is included.
+
 ## 📊 Presentation
 
 [View the slide deck (PDF)](slides/Access_Beyond_the_Map.pdf)
