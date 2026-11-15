@@ -2,9 +2,12 @@
 
 import copy
 import json
+import io
+import os
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -150,6 +153,51 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(self.request("/api/work-items", "POST", {}, {"Origin": "https://example.invalid"})[0], 403)
         self.assertEqual(self.request("/api/import", "POST", {"schema_version": 999})[0], 400)
         self.assertEqual(self.request("/..%2Fdatabase.py")[0], 404)
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_enter_key_use_it_and_remove_it_without_secret_disclosure(self):
+        key = 'sk-local-test-not-a-real-key'
+        try:
+            with patch('access_app.chat.urlopen') as provider:
+                status, body, headers = self.request('/api/chat/config', 'POST', {'api_key': key, 'model': 'test-model'}, {'Origin': self.url})
+                provider.assert_not_called()
+            self.assertEqual(status, 200)
+            self.assertTrue(json.loads(body)['available'])
+            self.assertTrue(json.loads(body)['configurable'])
+            self.assertNotIn(key.encode(), body)
+            self.assertEqual(headers['Cache-Control'], 'no-store')
+            self.assertNotIn(key.encode(), self.request('/api/chat/config')[1])
+            response = {'status': 'completed', 'output': [{'content': [{'type': 'output_text', 'text': '{"source_ids":["E1"]}'}]}]}
+            with patch('access_app.chat.urlopen', return_value=io.BytesIO(json.dumps(response).encode())) as provider:
+                status, body, _ = self.request('/api/chat', 'POST', {'question': 'physical barriers', 'use_llm': True})
+            self.assertEqual(status, 200)
+            self.assertEqual(json.loads(body)['mode'], 'llm')
+            self.assertEqual(provider.call_args.args[0].get_header('Authorization'), 'Bearer ' + key)
+            self.assertNotIn(key.encode(), body)
+            self.assertNotIn(key.encode(), self.request('/api/metadata')[1])
+            self.assertEqual(self.request('/api/chat/config', 'POST', {'clear': True}, {'Origin': 'https://example.invalid'})[0], 403)
+            self.assertEqual(self.request('/api/chat/config', 'POST', {'api_key': 'x', 'model': 'x', 'unexpected': True})[0], 400)
+        finally:
+            self.request('/api/chat/config', 'POST', {'clear': True})
+        self.assertFalse(json.loads(self.request('/api/chat/config')[1])['available'])
+        with patch('access_app.chat.urlopen') as provider:
+            self.assertEqual(json.loads(self.request('/api/chat', 'POST', {'question': 'physical barriers', 'use_llm': True})[1])['mode'], 'retrieval')
+            provider.assert_not_called()
+
+    def test_browser_key_entry_is_disabled_for_network_bound_servers(self):
+        server = make_server(self.store, host='0.0.0.0', port=0)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        url = f'http://127.0.0.1:{server.server_port}/api/chat/config'
+        try:
+            with urlopen(url, timeout=10) as response:
+                self.assertFalse(json.load(response)['configurable'])
+            request = Request(url, data=b'{"api_key":"sk-test","model":"test-model"}', headers={'Content-Type': 'application/json'})
+            with self.assertRaises(HTTPError) as error:
+                urlopen(request, timeout=10)
+            self.assertEqual(error.exception.code, 403)
+        finally:
+            server.shutdown(); server.server_close(); thread.join()
 
 
 if __name__ == "__main__":

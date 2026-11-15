@@ -6,7 +6,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from access_app.chat import answer, select_sources
+from access_app.chat import ChatSettings, Credentials, answer, select_sources
 from access_app.database import Store
 from access_app.demo import demo_bundle
 from access_app.schema import AppError
@@ -142,6 +142,49 @@ class ChatTests(unittest.TestCase):
         self.assertEqual(len(result['ranking']), 5)
         self.assertEqual(result['aggregate']['locations'], 14)
         self.assertEqual(result['aggregate']['sampled_reviews'], 81)
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_runtime_keys_are_isolated_clearable_and_never_returned(self):
+        first, second = ChatSettings(), ChatSettings()
+        key = 'sk-test-private-runtime-key'
+        with patch('access_app.chat.urlopen') as provider:
+            public = first.configure({'api_key': key, 'model': 'test-model'})
+            provider.assert_not_called()
+        self.assertTrue(public['available'])
+        self.assertNotIn(key, json.dumps(public))
+        self.assertNotIn(key, repr(first.credentials()))
+        self.assertFalse(second.credentials().available)
+        frozen = first.credentials()
+        first.configure({'clear': True})
+        self.assertFalse(first.credentials().available)
+        self.assertFalse(ChatSettings().credentials().available)
+        self.assertTrue(frozen.available)
+        response = {'status': 'completed', 'output': [{'content': [{'type': 'output_text', 'text': '{"source_ids":["E1"]}'}]}]}
+        with patch('access_app.chat.urlopen', return_value=io.BytesIO(json.dumps(response).encode())) as provider:
+            result = answer(self.store, {'question': 'physical barriers', 'use_llm': True}, frozen)
+        self.assertEqual(provider.call_args.args[0].get_header('Authorization'), 'Bearer ' + key)
+        self.assertEqual(result['mode'], 'llm')
+        self.assertNotIn(key, json.dumps(result))
+
+    def test_runtime_settings_validation_and_environment_override(self):
+        settings = ChatSettings()
+        for payload in ([], {}, {'api_key': '', 'model': 'x'}, {'api_key': 'x'*1025, 'model': 'x'},
+                        {'api_key': 'sk-test\r\nheader', 'model': 'x'}, {'api_key': 'sk-test', 'model': 'bad model'},
+                        {'api_key': 'sk-test', 'model': 'x', 'url': 'https://example.invalid'}, {'clear': 'yes'}, {'clear': 1}):
+            with self.subTest(payload=payload), self.assertRaises(AppError):
+                settings.configure(payload)
+        with patch.dict(os.environ, {'ACCESS_CHAT_PROVIDER': 'openai', 'ACCESS_CHAT_MODEL': 'env-model', 'OPENAI_API_KEY': 'sk-env-test'}):
+            self.assertTrue(settings.credentials().available)
+            settings.configure({'clear': True})
+            self.assertFalse(settings.credentials().available)
+
+    def test_default_model_disables_reasoning_and_keeps_bounded_output(self):
+        response = {'status': 'completed', 'output': [{'content': [{'type': 'output_text', 'text': '{"source_ids":["E1"]}'}]}]}
+        with patch('access_app.chat.urlopen', return_value=io.BytesIO(json.dumps(response).encode())) as provider:
+            select_sources('ramps', [{'id': 'E1'}], Credentials('openai', api_key='sk-test'))
+        payload = json.loads(provider.call_args.args[0].data)
+        self.assertEqual(payload['reasoning'], {'effort': 'none'})
+        self.assertEqual(payload['max_output_tokens'], 500)
 
 
 if __name__ == '__main__':

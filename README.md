@@ -12,23 +12,41 @@ Read the [complete system design and website walkthrough](docs/SYSTEM_DESIGN.md)
 
 This version adds conservative alternate-ID/name-address matching, a five-model comparison including Naive Bayes and a majority baseline, separate human-annotation handoffs, an evidence chatbot, and an optional OSM context adapter. See [IMPROVEMENTS.md](IMPROVEMENTS.md) for commands, measured input coverage, limitations and optional LLM setup.
 
-**Current verification boundary:** the full Reviews file was obtained again, but the Places source is quota-blocked. The historical full-data results below have not been regenerated with these changes. Independent human evaluation remains pending. The app can be tested with the explicitly fictional demo until a real notebook export is available.
+**Current verification boundary:** the repo includes the existing real-data classified snapshot: **79 mapped locations, 1,868 retained reviews summarized, and 365 evidence excerpts**. This snapshot predates the latest matching/model-comparison changes; those changes have not regenerated it. Independent human evaluation remains pending. The raw organizer files and training dependencies are not needed to explore these saved results.
 
 ## Run the local app
 
 For a verified step-by-step setup, see [Run locally](docs/RUN_LOCALLY.md), including macOS/Linux and Windows commands, real-results import, optional LLM setup and troubleshooting.
 
-Use Python 3.11–3.13 (3.12 recommended alongside the notebook).
+Install Python 3.11 or later (3.12 recommended), then clone and launch:
 
 ```sh
-python3.12 -m venv .venv
-.venv/bin/python -m pip install -r requirements-app.txt
-.venv/bin/python -m access_app serve --demo
+git clone https://github.com/zen0072/fall2026_datathon.git
+cd fall2026_datathon
+python3 scripts/launch_app.py
 ```
 
-Open **http://127.0.0.1:8000/**. On Windows, use `.venv\Scripts\python` instead of `.venv/bin/python`.
+On Windows, use `py -3 scripts/launch_app.py`. The launcher creates `.venv`, installs only `requirements-app.txt`, loads the **real classified results** into an empty local DuckDB database, and opens **http://127.0.0.1:8000/**. Initial dependency installation requires internet access. No Node build, raw CSV downloads or model training are needed.
 
-`--demo` seeds four **fictional** locations only when the database has no imported results. It never replaces an existing real-data snapshot. Omit it to start with an empty database. The demo classifications are illustrative interface examples, not trained-model findings or measured impact.
+If port 8000 is busy, use `python3 scripts/launch_app.py --port 8001`. Add `--no-browser` to open the URL yourself. Stop the app with **Ctrl+C**. Existing imported data is never overwritten; use `--db var/fresh.duckdb` for a fresh database.
+
+To test OpenAI evidence selection:
+
+1. In **Ask the review data**, expand **Use your own OpenAI key**.
+2. Enter your own API key and a Responses API model available to your account. The default is `gpt-5.6-terra`, which supports structured outputs. Choose **Use key for this run**.
+3. Select **Use LLM evidence selection**, then ask a question. A saved key has not been validated until an actual request succeeds; the answer shows whether it used OpenAI or offline retrieval.
+
+The password field clears after submission. The key goes only to your local Python server and is kept in memory, never in browser storage, the results JSON or the local database. Choose **Remove key** or stop the server to discard a key entered through the page. Requests made with your key use **your OpenAI API billing**. No API key is needed to explore locations or use offline evidence retrieval. Each LLM request sends your question and up to 24 review excerpts to OpenAI; no conversation history is sent. The app does not automatically load `.env` files; setting server environment variables remains an alternative to the form.
+
+For a manual setup:
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-app.txt
+.venv/bin/python -m access_app serve --bundled
+```
+
+On Windows, use `.venv\Scripts\python` instead of `.venv/bin/python`. `--bundled` loads the included real snapshot only into an empty database. For an empty app, omit it or use the launcher with `--empty`. `--demo` is still available explicitly for four **fictional** test locations, with no measured model findings or impact.
 
 The app serves its frontend and JSON API from one Python process and persists records in `var/access.duckdb`. No Node build step is required. The default loopback address keeps this prototype local; authentication and organization-level permissions have not been implemented for public hosting.
 
@@ -49,9 +67,9 @@ The browser import limit is 128 MB; use the CLI for larger results files. Refres
 
 ## Historical real-data run: TF-IDF + logistic regression
 
-Both full organizer files are cached in ignored `data/`: **Places** has 147,429 rows (506,418,083 bytes) and **Reviews** has 213,536 rows (221,618,514 bytes). Source SHA-256 hashes are recorded in `outputs/real/sources.json` and the imported snapshot. The user supplied the full Places CSV after the earlier Drive quota block.
+In the original local run, both full organizer files were cached in ignored `data/`: **Places** has 147,429 rows (506,418,083 bytes) and **Reviews** has 213,536 rows (221,618,514 bytes). These raw files are not included in a clone. Source SHA-256 hashes are recorded in the bundled snapshot and the private run's `outputs/real/sources.json`. The user supplied the full Places CSV after the earlier Drive quota block.
 
-The notebook completed locally in real mode and its **trained word TF-IDF + logistic regression predictions** are now imported into the frontend database. The current export contains **79 mapped locations, 1,868 retained reviews, and 365 aspect excerpts**. This replaces the earlier reviews-only keyword snapshot. The full notebook filters explicitly permanently closed places, scopes essential-service categories, deduplicates reviews and holds out locations before training.
+The notebook completed locally in real mode and its **trained word TF-IDF + logistic regression predictions** are included as the bundled snapshot in `access_app/data/classified_locations.json`. The export contains **79 mapped locations, 1,868 retained reviews, and 365 aspect excerpts**. This replaces the earlier reviews-only keyword snapshot. The full notebook filters explicitly permanently closed places, scopes essential-service categories, deduplicates reviews and holds out locations before training. New matching/model changes do not alter the bundled snapshot until a new notebook run is exported.
 
 Coverage is limited: 2,985 raw review rows match a Places ID; after empty-review and closure filtering, 2,837 rows remain matched (about 1.33% of eligible review rows). The essential-service subset retains 1,868 reviews after deduplication. It is not a complete inventory, and zero matches for a service do not establish that the service is absent.
 
@@ -107,7 +125,7 @@ The schema-version-1 file contains:
 - `aspects`: all five access-aspect summaries per place, report counts, dates and verification questions.
 - `evidence`: mentioned-aspect excerpts with record IDs, dates, predicted states and optional uncalibrated scores. No-mention rows contribute to denominators without exporting unnecessary review text.
 
-The importer stores only declared analysis fields. Reviewer name/profile columns are not imported. Review text can still contain personal information: keep real-data exports and the local database private, and review excerpts before sharing. Raw data, exports, database files and local environments are ignored by Git.
+The importer stores only declared analysis fields. Reviewer name/profile columns are not imported. The deliberately included `access_app/data/classified_locations.json` contains the saved classifications and original evidence excerpts used for testing. Raw data, private notebook outputs, database files, credentials and local environments remain ignored by Git. Review text can contain personal information; review any new exports before redistributing them.
 
 ## Tests
 
@@ -126,5 +144,8 @@ Tests cover notebook execution, the actual notebook-to-DuckDB export/import path
 | `GET /api/places` | Filtered/paginated location summaries |
 | `GET /api/places/{place_id}?aspect=physical&snapshot_id=...` | Place, aspect summaries and evidence |
 | `POST /api/import` | Import a schema-version-1 notebook JSON payload |
+| `GET /api/chat/config` | Public connection status and model; never returns credentials |
+| `POST /api/chat/config` | Set or remove an in-memory key, on a loopback-bound local server only |
+| `POST /api/chat` | Query local evidence with optional OpenAI evidence selection |
 
 For existing Colab verification and remaining real-data research blockers, see [VERIFICATION.md](VERIFICATION.md).

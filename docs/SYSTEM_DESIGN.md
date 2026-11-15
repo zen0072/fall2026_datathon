@@ -65,7 +65,7 @@ flowchart TB
 
 The JSON export is the boundary between research and the product. The website can import a successful notebook run without installing the training dependencies. DuckDB stores immutable result snapshots and an active-snapshot pointer. A single Python process serves both the static frontend and the JSON API, avoiding a separate frontend build or application server service.
 
-The OpenAI path is optional and explicitly enabled by the user. The browser never receives the API key. The map's external dependency is Esri basemap tiles; stored place coordinates and classification markers come from the local app.
+The OpenAI path is optional and explicitly enabled by the user. In the local app, testers can enter their own key through a password form; it is submitted to the loopback Python server and immediately cleared from the form. The server keeps it only in memory for that run and never returns it in responses or stores it in DuckDB. Environment credentials remain an alternative. The map's external dependency is Esri basemap tiles; stored place coordinates and classification markers come from the local app.
 
 ## 2. What happens before someone opens the website
 
@@ -154,8 +154,8 @@ The database also retains `work_items` and related APIs for compatibility. The c
 
 ## 6. What happens when someone uses the website
 
-1. **Start the server.** `python -m access_app serve` opens the local DuckDB file and serves HTML, CSS, vendored Leaflet JavaScript and the JSON API. `--demo` seeds four fictional locations only if no snapshot exists. An empty database otherwise shows an import prompt.
-2. **Load the page.** JavaScript requests `/api/metadata` to display dataset mode and coverage and `/api/chat/config` to determine whether optional LLM selection is available. The latter reports availability, never the key.
+1. **Start the server.** `python3 scripts/launch_app.py` creates/reuses `.venv`, installs only app dependencies and runs `python -m access_app serve --bundled` on loopback. The included existing real snapshot (79 mapped locations, 1,868 retained reviews summarized, 365 excerpts) seeds an empty database. Existing results are preserved. HTML, CSS, vendored Leaflet JavaScript and the JSON API come from one Python process. Explicit `--demo` seeds four fictional locations instead; serving without either seed option leaves an empty database at the import prompt.
+2. **Load the page.** JavaScript requests `/api/metadata` to display dataset mode and coverage and `/api/chat/config` to determine whether optional LLM selection is available. The latter reports availability/model, never the key. The local-only password form can POST a key and model to `/api/chat/config`, or clear them for offline mode. Saving makes no OpenAI request, and the user must separately select the LLM checkbox before asking a question.
 3. **Import results, if needed.** “Import results” reads the notebook JSON and posts it to `/api/import`. The browser limit is 128 MiB; the CLI importer can handle larger files. Imported results do not initiate training.
 4. **Fetch the list and map.** Two parallel `/api/places` requests use the same service, aspect, search, classification and sort filters. The list requests 20 rows per page; the map requests the first 500 matching rows. SQL queries stored classifications. Search matches location names/addresses, not semantic review content.
 5. **Render the map.** Leaflet draws stored coordinates and classification colors over Esri tiles. Missing coordinates remain usable in the list. Network tile failure does not remove stored evidence.

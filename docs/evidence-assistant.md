@@ -1,9 +1,9 @@
 # Evidence assistant
 
-The explorer now includes **Ask the review data**. Load an imported bundle or run the fictional demo:
+The explorer includes **Ask the review data**. Clone the repo and launch the existing real classified snapshot:
 
 ```sh
-python -m access_app serve --demo --db var/demo.duckdb
+python3 scripts/launch_app.py
 ```
 
 Ask a question and optionally restrict to the selected location. Aspect, service and location-name/address search follow the explorer controls. Explicit single-aspect or service words in the question override the explorer defaults; the response discloses this. Questions about counts, ranking, verification and reliability receive intent-specific explanations; unrelated questions are identified as unsupported. Classification is intentionally always **all** to retain positive, mixed and insufficient evidence. A response records the exact scope and snapshot; changing filters does not change an already returned answer. Questions are independent: conversation history is not sent or persisted.
@@ -12,7 +12,11 @@ Offline mode works without credentials. It computes exact aggregate counts acros
 
 ## Optional OpenAI evidence selection
 
-Configure these **server-side** environment variables before starting the app:
+On the locally running page, expand **Use your own OpenAI key**, enter your API key and model, then choose **Use key for this run**. The key is submitted once to the same-origin local Python server; the password field clears and the app never stores it in localStorage, sessionStorage, cookies, DuckDB or a results file. Settings are isolated to that server instance, not persisted between server runs. **Remove key** switches this run to offline mode, including when environment credentials were initially configured. Browser-entry settings are disabled if the server binds to a non-loopback interface. Keep the default loopback address.
+
+Saving a key makes no provider request and is not a connection test. Select **Use LLM evidence selection** and ask a question to try it; the response explicitly shows LLM or fallback mode. Requests use the tester's own OpenAI API billing. The default `gpt-5.6-terra` supports Responses structured outputs, and its request disables reasoning for bounded evidence selection. The model ID can be changed to another compatible model available to the tester's account.
+
+Alternatively, configure these **server-side** environment variables before starting the app:
 
 ```sh
 export ACCESS_CHAT_PROVIDER=openai
@@ -21,7 +25,7 @@ export OPENAI_API_KEY=YOUR_KEY
 python -m access_app serve --db var/access.duckdb
 ```
 
-Select a model available to your account that supports structured outputs in the Responses API. The checkbox is enabled only when all three variables are configured; the user must opt in on each browser session. Requests send the question and bounded evidence (including location names and excerpts) to OpenAI. Do not enable for data you cannot send externally. Credentials never reach the frontend, response API, or results bundle. The app requests `store:false`; this is not a promise about provider retention policies.
+Select a model available to your account that supports structured outputs in the Responses API. When using environment configuration, the provider must be `openai` and a key must be present; a missing model uses the default above. The user must opt in on each browser session. Requests send the question and bounded evidence (including location names and excerpts) to OpenAI. The server never returns the key to the browser, API responses or results bundle. The app requests `store:false`; this is not a promise about provider retention policies. `.env` files are not automatically loaded.
 
 The LLM selects relevant citation IDs from retrieved evidence. It does **not** calculate counts, change ranking, supply SQL, call tools, or generate displayed factual claims. Verification suggestions are curated per aspect. This intentionally conservative extractive design supports evidence exploration rather than unrestricted conversational answers. Citations alone cannot validate generated statements, so free-form model prose is not displayed. Unsupported questions receive scope evidence and an explicit limitation rather than invented answers. Missing configuration, provider errors, invalid IDs, incomplete output, or excess concurrency fall back to offline retrieval with a visible mode label.
 
@@ -30,6 +34,8 @@ Question length is limited to 1,500 characters; filters to 200 characters; reque
 The app is a local loopback tool, not an authenticated public service. Keep its default loopback binding.
 
 Provider contract checked against [OpenAI Responses API reference](https://developers.openai.com/api/reference/resources/responses/methods/create). Tests mock provider output and make no paid API calls. Run `python -m unittest discover -s tests -v` and `node --check access_app/static/app.js`.
+
+Credential handling follows [OpenAI API key guidance](https://developers.openai.com/api/docs/guides/api-keys). Default model capabilities: [GPT-5.6 Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra).
 
 ## Live smoke test (deferred)
 

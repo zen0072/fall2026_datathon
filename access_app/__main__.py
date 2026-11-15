@@ -8,6 +8,7 @@ from .database import Store
 from .demo import demo_bundle
 from .schema import AppError
 from .server import make_server
+from .bundled import seed_bundled_results
 
 
 def main():
@@ -17,7 +18,9 @@ def main():
     parser.add_argument("--db", default="var/access.duckdb", help="Persistent DuckDB file")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--demo", action="store_true", help="On serve, seed fictional demo data only if the database has no imported snapshot")
+    seed = parser.add_mutually_exclusive_group()
+    seed.add_argument("--demo", action="store_true", help="On serve, seed fictional demo data only if the database has no imported snapshot")
+    seed.add_argument("--bundled", action="store_true", help="On serve, load the included real classified results only if the database is empty")
     args = parser.parse_args()
     store = Store(args.db)
     try:
@@ -29,6 +32,8 @@ def main():
         elif args.command == "demo":
             print(json.dumps(store.import_bundle(demo_bundle()), indent=2))
         else:
+            if args.bundled:
+                seed_bundled_results(store)
             if args.demo and not store.metadata()["snapshot_id"]:
                 store.import_bundle(demo_bundle())
             server = make_server(store, args.host, args.port)

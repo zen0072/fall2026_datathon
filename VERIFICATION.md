@@ -1,4 +1,33 @@
-# Current improvement verification — November 15, 2026
+# Clone-and-run verification — November 15, 2026
+
+The local launcher was tested from a clean copy of the app without raw `data/`,
+private `outputs/`, an existing database or a preinstalled virtual environment.
+It created `.venv`, installed only `duckdb==1.4.4`, and started the loopback app
+with the existing real snapshot: **79 mapped locations, 1,868 retained reviews
+summarized, and 365 excerpts**. Its active snapshot remained
+`4887f6bd845d108a5285f537`. Packaging did not rerun training or the new matcher.
+
+Browser verification confirmed the real location list/map, password form,
+cleared password field after submission, enabled LLM option with a dummy key,
+key removal, and an offline answer using all 79 locations/1,868 sampled reviews.
+No browser console warnings/errors were recorded. The dummy key was absent from
+the local database files. Settings return only availability and model, refuse
+cross-origin changes, and disable browser key entry for non-loopback-bound
+servers. Separate server instances do not share entered keys.
+
+The full suite passed **46 tests**, including notebook execution/export/import,
+bundled real-result seeding, existing-import preservation, key configuration,
+HTTP contracts, and mocked OpenAI calls using the provided key without returning
+it. JavaScript syntax and diff whitespace checks passed. No paid/live OpenAI
+request was made; actual provider access remains for testers to verify using
+their own key. Offline fallback is shown explicitly and is not reported as an
+LLM success.
+
+The reports below preserve earlier verification contexts and their limits.
+
+---
+
+# Improvement-development verification — November 15, 2026
 
 See [IMPROVEMENTS.md](IMPROVEMENTS.md) for the changes in this checkout and reproducible commands. The final combined suite passed **39 tests**, including HTTP/chat, alternative matching, closure safety, model/annotation invariants and notebook-to-app integration. JavaScript syntax and diff whitespace checks passed.
 

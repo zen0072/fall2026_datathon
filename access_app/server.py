@@ -3,18 +3,21 @@
 import json
 import mimetypes
 import sys
+import ipaddress
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from .schema import AppError
-from .chat import answer as chat_answer, config as chat_config
+from .chat import ChatSettings, answer as chat_answer, config as chat_config
 
 STATIC = Path(__file__).parent / "static"
 MAX_IMPORT_BYTES = 128 * 1024 * 1024
 
 
 def make_server(store, host="127.0.0.1", port=8000):
+    chat_settings = ChatSettings()
+
     class Handler(BaseHTTPRequestHandler):
         server_version = "AccessWorkspace/1.0"
 
@@ -62,6 +65,14 @@ def make_server(store, host="127.0.0.1", port=8000):
             except (ValueError, UnicodeDecodeError) as error:
                 raise AppError("Invalid JSON request.") from error
 
+        def _can_configure_chat(self):
+            return (host in {"localhost", "127.0.0.1", "::1"}
+                    and ipaddress.ip_address(self.client_address[0]).is_loopback)
+
+        def _chat_config(self):
+            return {**chat_config(chat_settings.credentials()),
+                    "configurable": self._can_configure_chat()}
+
         def _handle(self):
             self._check_origin()
             parsed = urlsplit(self.path)
@@ -69,7 +80,7 @@ def make_server(store, host="127.0.0.1", port=8000):
             query = {key: values[-1] for key, values in parse_qs(parsed.query).items()}
             if self.command == "GET":
                 if path == "/api/chat/config":
-                    return self._send(200, chat_config())
+                    return self._send(200, self._chat_config())
                 if path == "/api/health":
                     return self._send(200, {"ok": True, "storage": "duckdb"})
                 if path == "/api/metadata":
@@ -101,7 +112,12 @@ def make_server(store, host="127.0.0.1", port=8000):
                     raise AppError("Page not found.", 404)
                 return self._send(200, target.read_bytes(), mimetypes.guess_type(target.name)[0] or "application/octet-stream")
             if self.command == "POST" and path == "/api/chat":
-                return self._send(200, chat_answer(store, self._json_body()))
+                return self._send(200, chat_answer(store, self._json_body(), chat_settings.credentials()))
+            if self.command == "POST" and path == "/api/chat/config":
+                if not self._can_configure_chat():
+                    raise AppError("API keys can only be entered on a loopback-bound local server.", 403)
+                chat_settings.configure(self._json_body())
+                return self._send(200, self._chat_config())
             if self.command == "POST" and path == "/api/import":
                 return self._send(200, store.import_bundle(self._json_body()))
             if self.command == "POST" and path == "/api/work-items":

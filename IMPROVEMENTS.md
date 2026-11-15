@@ -1,5 +1,13 @@
 # Matching, model comparisons, and evidence assistant
 
+**Local testing update:** `python3 scripts/launch_app.py` now loads the existing
+79-location real classified snapshot included in `access_app/data/`, with a
+local-only form for each tester's own OpenAI API key. No raw dataset download or
+retraining is required. See [README.md](README.md) and [VERIFICATION.md](VERIFICATION.md).
+The measurements below describe the earlier matching/model development session;
+bundling its predecessor's results does not establish new matching coverage or
+independent model accuracy.
+
 ## Implemented
 
 - Conservative entity resolution: exact Places ID, alternate Google CID/FID (including supported Google URL IDs), then unique normalized name plus numbered full address. Conflicting fallback metadata and ambiguous businesses are rejected. Source review IDs remain stable; canonical place IDs define grouped splits. Match decisions and per-method coverage are exported. No name-only or fuzzy chain-name joins.
@@ -18,7 +26,7 @@ The full Reviews source downloaded successfully: 221,618,514 bytes, SHA-256 `178
 - 3,326 place IDs have a CID key through a column, FID, or supported URL.
 - 42 entities have conflicting name/address keys; one has conflicting CIDs. The fallback matcher excludes conflicting keys/entities rather than choosing arbitrarily.
 
-These are **matching-key availability**, not recovered matches. The full Places download returned Google's quota-exceeded HTML and was quarantined instead of treated as CSV. No fresh two-file join, improved coverage percentage, or real-data retraining is claimed. The earlier 1.33% and 79-location run in the historical README was documented by the original project; its private artifacts are not available in this checkout.
+These are **matching-key availability**, not recovered matches. The full Places download returned Google's quota-exceeded HTML and was quarantined instead of treated as CSV. No fresh two-file join, improved coverage percentage, or real-data retraining is claimed for this development session. The earlier 1.33% and 79-location run was documented by the original project; its existing classified export was subsequently recovered and bundled for local app testing as described above.
 
 No human annotations or external OSM dataset were supplied. Independent model accuracy, actual enrichment coverage, and stakeholder impact remain unmeasured. Tests use fixtures and are software verification only. No live paid LLM request was made. The user explicitly deferred live LLM testing; missing provider configuration remains unresolved. Provider timeout, malformed/oversized/incomplete responses, invalid citations, missing configuration and opt-in boundaries are tested with mocks.
 

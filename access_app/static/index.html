@@ -48,6 +48,19 @@
       <section class="panel chat-panel" aria-labelledby="chat-title">
         <span class="eyebrow">Evidence assistant</span><h2 id="chat-title">Ask the review data</h2>
         <p class="muted">Explore reports, compare verification priorities and plan what to check. Uses the aspect, service and location search above; includes all classifications.</p>
+        <details id="chat-settings" class="chat-settings">
+          <summary>Use your own OpenAI key</summary>
+          <p class="small muted">Optional. Your key stays in this local server’s memory until you remove it or stop the app. OpenAI calls use your API billing.</p>
+          <form id="chat-settings-form" autocomplete="off">
+            <div class="chat-settings-fields">
+              <label for="chat-api-key">OpenAI API key<input id="chat-api-key" type="password" required maxlength="1024" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste your own API key"></label>
+              <label for="chat-model">Model<input id="chat-model" required maxlength="100" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="chat-model-help"></label>
+            </div>
+            <p id="chat-model-help" class="small muted">Use a model available to your account that supports the Responses API and structured outputs.</p>
+            <div class="chat-key-actions"><button id="chat-key-save" type="submit" class="button secondary">Use key for this run</button><button id="chat-key-remove" type="button" class="button secondary" disabled>Remove key</button></div>
+          </form>
+          <p id="chat-key-status" class="small muted" role="status" aria-live="polite">No key is needed to browse locations or use offline retrieval.</p>
+        </details>
         <form id="chat-form">
           <label for="chat-question">Your question<input id="chat-question" maxlength="1500" required placeholder="Which locations should we verify first, and why?"></label>
           <div class="chat-options"><label><input id="chat-selected" type="checkbox"> Only the selected location</label><label><input id="chat-llm" type="checkbox" disabled> Use LLM evidence selection</label></div>

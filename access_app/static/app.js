@@ -185,10 +185,44 @@ if (['#locations','#queue','#data'].includes(location.hash)) history.replaceStat
 run(loadData());
 
 let chatBusy=false;
-api('/api/chat/config').then(config=>{
+function renderChatConfig(config) {
   $('#chat-llm').disabled=!config.available;
-  $('#chat-provider').textContent=config.available ? 'Optional: send your question and up to 24 review excerpts to OpenAI for evidence selection. No conversation history is sent.' : 'Offline retrieval active. Configure server-side OpenAI credentials to enable optional LLM evidence selection.';
-}).catch(()=>{});
+  if (!config.available) $('#chat-llm').checked=false;
+  $('#chat-settings').hidden=!config.configurable;
+  $('#chat-model').value=config.model || '';
+  $('#chat-key-remove').disabled=!config.available;
+  $('#chat-provider').textContent=config.available ? `Optional: use ${config.model} to select evidence. Your question and up to 24 review excerpts are sent to OpenAI. No conversation history is sent.` : config.configurable ? 'Offline retrieval active. Add your own key above to enable optional LLM evidence selection.' : 'Offline retrieval active. Configure server-side OpenAI credentials to enable optional LLM evidence selection.';
+  $('#chat-key-status').textContent=config.available ? 'A key is configured. Select “Use LLM evidence selection” below, then ask a question. Credentials have not been tested with OpenAI yet.' : 'No key is active. Offline retrieval is available without API credentials.';
+}
+run(api('/api/chat/config').then(renderChatConfig));
+
+let keyBusy=false;
+async function updateChatSettings(payload) {
+  if (keyBusy) return;
+  keyBusy=true;
+  $('#chat-key-save').disabled=true;
+  $('#chat-key-remove').disabled=true;
+  $('#chat-settings-form').setAttribute('aria-busy','true');
+  try {
+    renderChatConfig(await api('/api/chat/config',{method:'POST',body:payload}));
+  } catch(error) {
+    $('#chat-key-status').textContent=error.message;
+    // Read only public connection status; the server never returns the key.
+    try {const config=await api('/api/chat/config');$('#chat-key-remove').disabled=!config.available;}catch {}
+  } finally {
+    $('#chat-api-key').value='';
+    $('#chat-settings-form').removeAttribute('aria-busy');
+    $('#chat-key-save').disabled=false;
+    keyBusy=false;
+  }
+}
+$('#chat-settings-form').addEventListener('submit',event=>{
+  event.preventDefault();
+  const payload={api_key:$('#chat-api-key').value.trim(),model:$('#chat-model').value.trim()};
+  $('#chat-api-key').value='';
+  run(updateChatSettings(payload));
+});
+$('#chat-key-remove').addEventListener('click',()=>run(updateChatSettings({clear:true})));
 $('#chat-form').addEventListener('submit',async event=>{
   event.preventDefault();
   if (chatBusy) return;
