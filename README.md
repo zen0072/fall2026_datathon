@@ -4,7 +4,7 @@ A single-page explorer of classified accessibility issues at essential services.
 
 ## 📊 Presentation
 
-[View the slide deck (PDF)](slides/Access_Beyond_the_Map.pdf)
+[View the slide deck (PDF)](slides/Access Beyond the Map.pdf)
 
 ## Improvements in this checkout
 
