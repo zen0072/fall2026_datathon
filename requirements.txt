@@ -1,0 +1,17 @@
+# Python 3.11–3.12
+# Install: python -m pip install -r requirements.txt
+# Direct notebook dependencies; matches the Colab install cell.
+numpy==2.0.2
+pandas==2.2.3
+scikit-learn==1.6.1
+scipy==1.14.1
+matplotlib==3.9.4
+folium==0.19.5
+ipywidgets==8.1.5
+datasketch==1.6.5
+joblib==1.4.2
+gdown==5.2.0
+
+# Notebook display and local Jupyter kernel (preinstalled in Colab).
+ipython==8.32.0
+ipykernel==6.29.5
